@@ -1,0 +1,107 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "webgridplayer"
+version = "1.0.0"
+description = "VLC-based multi-video player with intelligent web stream extraction"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "WebGridPlayer Contributors", email = "contributors@webgridplayer.org"}
+]
+maintainers = [
+    {name = "WebGridPlayer Team", email = "maintainers@webgridplayer.org"}
+]
+keywords = ["video", "player", "vlc", "streaming", "multi-video", "grid", "web-extraction"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video :: Display",
+    "Topic :: Multimedia :: Video :: Playback",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Environment :: X11 Applications :: Qt",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "PyQt6>=6.0.0 ; python_version>='3.8'",
+    "PyQt5>=5.15.0 ; python_version>='3.8'",
+    "python-vlc>=3.0.20123",
+    "requests>=2.25.0",
+    "beautifulsoup4>=4.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+    "black>=21.0",
+    "flake8>=3.8",
+    "mypy>=0.800",
+    "pre-commit>=2.15.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/webgridplayer"
+Documentation = "https://github.com/yourusername/webgridplayer#readme"
+Repository = "https://github.com/yourusername/webgridplayer.git"
+"Bug Tracker" = "https://github.com/yourusername/webgridplayer/issues"
+Changelog = "https://github.com/yourusername/webgridplayer/blob/main/CHANGELOG.md"
+
+[project.scripts]
+webgridplayer = "webgridplayer:main"
+
+[tool.setuptools]
+py-modules = ["webgridplayer"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]
+exclude = [".git", "__pycache__", "build", "dist", ".venv", "venv"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=webgridplayer --cov-report=html --cov-report=term"

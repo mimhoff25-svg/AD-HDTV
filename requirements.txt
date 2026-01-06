@@ -1,0 +1,18 @@
+# WebGridPlayer Requirements
+# Core GUI framework (choose one)
+PyQt6>=6.0.0
+# PyQt5>=5.15.0  # Alternative if PyQt6 is not available
+
+# VLC Python bindings
+python-vlc>=3.0.20123
+
+# Web scraping and HTTP requests
+requests>=2.25.0
+beautifulsoup4>=4.9.0
+
+# Optional: Web engine for fallback viewing (heavy dependency)
+# PyQt6-WebEngine>=6.0.0
+# PyQt5-WebEngine>=5.15.0  # Alternative for PyQt5 users
+
+# Threading support (built into Python 3.x)
+# concurrent.futures is included in Python 3.2+
