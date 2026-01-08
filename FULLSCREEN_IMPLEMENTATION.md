@@ -18,8 +18,8 @@
 
 ### New Files
 - `tests/test_fullscreen_button_visibility.py`: Automated test verifying button appears in 1×1 and disappears in multi-grid layouts
-- `test_manual_check.py`: Diagnostic script to verify button state and grid sizing
-- `test_visual.py`: Visual test launcher with on-screen instructions
+- `tests/test_manual_check.py`: Diagnostic script to verify button state and grid sizing
+- `tests/test_visual.py`: Visual test launcher with on-screen instructions
 
 ## How It Works Now
 
@@ -43,7 +43,7 @@ Run the visual test:
 ```bash
 cd ~/projects/webgridplayer
 source ../.venv/bin/activate
-python test_visual.py
+python tests/test_visual.py
 ```
 
 Run automated tests:

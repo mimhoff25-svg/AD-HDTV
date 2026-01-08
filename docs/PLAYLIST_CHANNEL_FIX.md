@@ -82,7 +82,7 @@ The 8-video performance optimizations are **still active** but **conservative an
 ## Test Results
 
 ```bash
-python3 test_8_video_performance.py
+python3 tests/test_8_video_performance.py
 ✅ All tests pass without warnings
 ✅ VLC instance creation: ~0.017s
 ✅ Hardware acceleration available
