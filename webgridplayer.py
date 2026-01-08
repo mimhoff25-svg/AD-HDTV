@@ -51,6 +51,11 @@ except ImportError:
     print("Error: python-vlc is required. Install with: pip install python-vlc")
     sys.exit(1)
 
+# Allow disabling WebEngine via environment for headless/testing environments
+if os.environ.get("WGP_DISABLE_WEBENGINE", "") == "1":
+    WEBENGINE_AVAILABLE = False
+    QWebEngineView = None
+
 try:
     import requests
     from bs4 import BeautifulSoup
@@ -104,16 +109,32 @@ class VideoStreamExtractor:
         return streams
     
     def extract_streams(self, url: str) -> List[Dict[str, str]]:
-        """Extract video streams from a web page."""
+        """Extract video streams from a web page. Always returns at least browser mode as fallback."""
+        streams = []
+        
         try:
             response = self.session.get(url, timeout=10)
             response.raise_for_status()
             
             soup = BeautifulSoup(response.content, 'html.parser')
-            streams = []
             
             print(f"\n=== Extracting from: {url} ===")
 
+            # Method 0: Check for Video.js or blob URLs (requires browser mode)
+            blob_videos = re.findall(r'blob:[a-zA-Z0-9-_:/]+', response.text)
+            videojs_present = 'video-js' in response.text or 'vjs' in response.text or 'videojs' in response.text.lower()
+            
+            if blob_videos or videojs_present:
+                print(f"Detected Video.js / Blob video player - suggesting browser mode")
+                # Add the page URL itself as a browser mode option
+                streams.append({
+                    'url': url,
+                    'type': 'browser',
+                    'title': f'🌐 Browser Mode (Video.js) - {urlparse(url).netloc}'
+                })
+                if blob_videos:
+                    print(f"  Found {len(blob_videos)} blob URL(s) - these require browser rendering")
+            
             # Method 0: TheTVApp tokenized stream (jwplayer setup)
             streams.extend(self._extract_thetvapp_stream(soup, url))
 
@@ -308,11 +329,27 @@ class VideoStreamExtractor:
                     seen_urls.add(stream['url'])
                     unique_streams.append(stream)
             
+            # Fallback: If no streams found, suggest browser mode
+            # (useful for JavaScript-heavy sites like LocalNow with Video.js)
+            if not unique_streams:
+                print(f"No direct streams found - suggesting browser mode for dynamic content")
+                unique_streams.append({
+                    'url': url,
+                    'type': 'browser',
+                    'title': f'🌐 Browser Mode - {urlparse(url).netloc}'
+                })
+            
             return unique_streams
             
         except Exception as e:
             print(f"Error extracting streams from {url}: {e}")
-            return []
+            # Always return browser mode as fallback
+            print(f"Returning browser mode as fallback")
+            return [{
+                'url': url,
+                'type': 'browser',
+                'title': f'🌐 Browser Mode - {urlparse(url).netloc}'
+            }]
 
 
 class VideoPlayer(QFrame):
@@ -332,6 +369,12 @@ class VideoPlayer(QFrame):
         self.browser_mode = False
         self.web_view = None
         self.video_widget = None
+        
+        # Loop and refresh support
+        self.loop_enabled = False
+        self.auto_refresh_enabled = False
+        self.auto_refresh_interval = 300  # 5 minutes in seconds
+        self.refresh_timer = None
         
         self.init_ui()
         self.init_vlc()
@@ -364,7 +407,12 @@ class VideoPlayer(QFrame):
             self.mode_stack.addWidget(self.web_view)  # Index 1
         else:
             # Fallback: simple label explaining WebEngine is not available
-            fallback_label = QLabel("Web browser mode not available\\n(QtWebEngine not installed)")
+            fallback_label = QLabel(
+                "Web browser mode not available\n"
+                "(QtWebEngine not installed)\n\n"
+                f"Python: {sys.executable}\n"
+                f"VIRTUAL_ENV: {os.environ.get('VIRTUAL_ENV', '')}"
+            )
             fallback_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             fallback_label.setStyleSheet("color: white; background-color: black; padding: 20px;")
             self.mode_stack.addWidget(fallback_label)  # Index 1
@@ -399,14 +447,39 @@ class VideoPlayer(QFrame):
         self.is_muted = False
         info_layout.addWidget(self.mute_button)
         
-        # Fullscreen button (for browser mode)
+        # Caption toggle button
+        self.caption_button = QPushButton("CC")
+        self.caption_button.setFixedSize(30, 20)
+        self.caption_button.setStyleSheet("background-color: rgba(0,0,0,180); color: white; border: none; font-size: 9pt;")
+        self.caption_button.clicked.connect(self.toggle_captions)
+        self.caption_button.setToolTip("Toggle captions (V key)")
+        self.captions_enabled = False
+        info_layout.addWidget(self.caption_button)
+        
+        # Fullscreen button (window-level)
         self.fullscreen_button = QPushButton("⛶")
         self.fullscreen_button.setFixedSize(30, 20)
         self.fullscreen_button.setStyleSheet("background-color: rgba(0,0,0,180); color: white; border: none; font-size: 10pt;")
         self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
-        self.fullscreen_button.setToolTip("Toggle fullscreen (browser mode)")
-        self.fullscreen_button.setVisible(False)  # Hidden by default
+        self.fullscreen_button.setToolTip("Toggle fullscreen (Esc to exit)")
+        # Initially visible; main window will control visibility based on grid size
         info_layout.addWidget(self.fullscreen_button)
+        
+        # Loop button
+        self.loop_button = QPushButton("🔁")
+        self.loop_button.setFixedSize(30, 20)
+        self.loop_button.setStyleSheet("background-color: rgba(0,0,0,180); color: white; border: none; font-size: 9pt;")
+        self.loop_button.clicked.connect(self.toggle_loop)
+        self.loop_button.setToolTip("Loop video (L key)")
+        info_layout.addWidget(self.loop_button)
+        
+        # Auto-refresh button
+        self.refresh_button = QPushButton("🔄")
+        self.refresh_button.setFixedSize(30, 20)
+        self.refresh_button.setStyleSheet("background-color: rgba(0,0,0,180); color: white; border: none; font-size: 9pt;")
+        self.refresh_button.clicked.connect(self.toggle_auto_refresh)
+        self.refresh_button.setToolTip("Auto-refresh (R key)")
+        info_layout.addWidget(self.refresh_button)
         
         self.status_label = QLabel("⭕")
         self.status_label.setStyleSheet("color: #FFD700; background-color: rgba(0,0,0,180); padding: 2px; font-size: 9pt;")
@@ -453,6 +526,7 @@ class VideoPlayer(QFrame):
             self.event_manager.event_attach(vlc.EventType.MediaPlayerMediaChanged, self._on_media_changed)
             self.event_manager.event_attach(vlc.EventType.MediaPlayerTimeChanged, self._on_time_changed)
             self.event_manager.event_attach(vlc.EventType.MediaPlayerPositionChanged, self._on_position_changed)
+            self.event_manager.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_media_end)
             
         except Exception as e:
             print(f"Error initializing VLC for player {self.player_id}: {e}")
@@ -538,6 +612,99 @@ class VideoPlayer(QFrame):
             self.mute_button.setText("🔇" if self.is_muted else "🔊")
             self.mute_button.setToolTip("Unmute" if self.is_muted else "Mute")
     
+    def toggle_captions(self):
+        """Toggle captions/subtitles for this player."""
+        if not self.media_player:
+            return
+        try:
+            self.captions_enabled = not self.captions_enabled
+            
+            if self.captions_enabled:
+                # Try to enable the first available subtitle track
+                spu_count = self.media_player.video_get_spu_count()
+                if spu_count > 0:
+                    # Get list of available SPU (subtitle) tracks
+                    spus = self.media_player.video_get_spu_description()
+                    if spus and len(spus) > 0:
+                        # Enable first subtitle track
+                        self.media_player.video_set_spu(spus[0][0])
+                        self.caption_button.setText("CC✓")
+                        self.caption_button.setStyleSheet("background-color: rgba(0,200,0,200); color: white; border: none; font-size: 9pt;")
+                        self.caption_button.setToolTip("Captions ON (V key)")
+                        print(f"Captions enabled: {spus[0][1]}")
+                    else:
+                        self.caption_button.setText("CC✗")
+                        self.caption_button.setToolTip("No captions available")
+                        self.captions_enabled = False
+                else:
+                    self.caption_button.setText("CC✗")
+                    self.caption_button.setToolTip("No captions available")
+                    self.captions_enabled = False
+            else:
+                # Disable subtitles
+                self.media_player.video_set_spu(-1)
+                self.caption_button.setText("CC")
+                self.caption_button.setStyleSheet("background-color: rgba(0,0,0,180); color: white; border: none; font-size: 9pt;")
+                self.caption_button.setToolTip("Toggle captions (V key)")
+                print("Captions disabled")
+        except Exception as e:
+            print(f"Error toggling captions: {e}")
+            self.caption_button.setText("CC")
+            self.caption_button.setToolTip("Captions unavailable")
+            self.captions_enabled = False
+    
+    def toggle_loop(self):
+        """Toggle video looping."""
+        self.loop_enabled = not self.loop_enabled
+        if self.media_player:
+            self.media_player.video_set_aspect_ratio(None)  # Keep aspect ratio
+        
+        if self.loop_enabled:
+            self.loop_button.setText("🔁✓")
+            self.loop_button.setStyleSheet("background-color: rgba(0,150,0,200); color: white; border: none; font-size: 9pt;")
+            self.loop_button.setToolTip("Loop ON (L key)")
+            print("Loop enabled")
+        else:
+            self.loop_button.setText("🔁")
+            self.loop_button.setStyleSheet("background-color: rgba(0,0,0,180); color: white; border: none; font-size: 9pt;")
+            self.loop_button.setToolTip("Loop video (L key)")
+            print("Loop disabled")
+    
+    def toggle_auto_refresh(self):
+        """Toggle auto-refresh of stream."""
+        self.auto_refresh_enabled = not self.auto_refresh_enabled
+        
+        if self.auto_refresh_enabled:
+            self.refresh_button.setText("🔄✓")
+            self.refresh_button.setStyleSheet("background-color: rgba(0,100,200,200); color: white; border: none; font-size: 9pt;")
+            self.refresh_button.setToolTip(f"Auto-refresh ON every {self.auto_refresh_interval}s (R key)")
+            self.start_auto_refresh()
+            print(f"Auto-refresh enabled (interval: {self.auto_refresh_interval}s)")
+        else:
+            self.refresh_button.setText("🔄")
+            self.refresh_button.setStyleSheet("background-color: rgba(0,0,0,180); color: white; border: none; font-size: 9pt;")
+            self.refresh_button.setToolTip("Auto-refresh (R key)")
+            self.stop_auto_refresh()
+            print("Auto-refresh disabled")
+    
+    def start_auto_refresh(self):
+        """Start the auto-refresh timer."""
+        if self.refresh_timer is None:
+            self.refresh_timer = QTimer()
+            self.refresh_timer.timeout.connect(self._do_auto_refresh)
+        self.refresh_timer.start(self.auto_refresh_interval * 1000)  # Convert to milliseconds
+    
+    def stop_auto_refresh(self):
+        """Stop the auto-refresh timer."""
+        if self.refresh_timer:
+            self.refresh_timer.stop()
+    
+    def _do_auto_refresh(self):
+        """Perform auto-refresh by reloading the current stream."""
+        if self.current_url and self.media_player:
+            print(f"Auto-refreshing: {self.current_url[:60]}")
+            self.load_media(self.current_url, "Auto-Refreshed")
+    
     def toggle_mode(self):
         """Toggle between VLC and browser mode."""
         if not WEBENGINE_AVAILABLE:
@@ -550,7 +717,11 @@ class VideoPlayer(QFrame):
             self.mode_stack.setCurrentIndex(1)
             self.mode_button.setText("📺")
             self.mode_button.setToolTip("Switch to VLC mode")
-            self.fullscreen_button.setVisible(True)
+            # Visibility managed by main window based on grid size
+            wnd = self.window()
+            updater = getattr(wnd, 'update_fullscreen_button_visibility', None)
+            if callable(updater):
+                updater()
             self.status_label.setText("🌐")
             
             # Load current URL in browser if available
@@ -561,20 +732,37 @@ class VideoPlayer(QFrame):
             self.mode_stack.setCurrentIndex(0)
             self.mode_button.setText("🎬")
             self.mode_button.setToolTip("Switch to browser mode")
-            self.fullscreen_button.setVisible(False)
+            # Visibility managed by main window based on grid size
+            wnd = self.window()
+            updater = getattr(wnd, 'update_fullscreen_button_visibility', None)
+            if callable(updater):
+                updater()
             self.status_label.setText("📺")
     
     def toggle_fullscreen(self):
-        """Toggle fullscreen for browser mode."""
-        if self.browser_mode and self.web_view and WEBENGINE_AVAILABLE:
-            if self.web_view.isFullScreen():
-                self.web_view.showNormal()
+        """Toggle application window fullscreen."""
+        wnd = self.window()
+        # Prefer calling main window's toggle if available
+        toggle = getattr(wnd, 'toggle_fullscreen', None)
+        if callable(toggle):
+            toggle()
+            # Update icon based on window state
+            if wnd.isFullScreen():
+                self.fullscreen_button.setText("⛏")
+                self.fullscreen_button.setToolTip("Exit fullscreen (Esc)")
+            else:
                 self.fullscreen_button.setText("⛶")
                 self.fullscreen_button.setToolTip("Enter fullscreen")
-            else:
-                self.web_view.showFullScreen()
-                self.fullscreen_button.setText("⛏")
-                self.fullscreen_button.setToolTip("Exit fullscreen")
+            return
+        # Fallback: directly toggle window fullscreen
+        if wnd.isFullScreen():
+            wnd.showNormal()
+            self.fullscreen_button.setText("⛶")
+            self.fullscreen_button.setToolTip("Enter fullscreen")
+        else:
+            wnd.showFullScreen()
+            self.fullscreen_button.setText("⛏")
+            self.fullscreen_button.setToolTip("Exit fullscreen (Esc)")
     
     def load_url_in_browser(self, url: str):
         """Load URL in browser mode."""
@@ -614,6 +802,13 @@ class VideoPlayer(QFrame):
     def _on_position_changed(self, event):
         """Handle position changed event."""
         pass
+    
+    def _on_media_end(self, event):
+        """Handle media end reached event - restart if looping."""
+        if self.loop_enabled and self.media_player and self.current_url:
+            print(f"Media ended, restarting (loop enabled)")
+            self.media_player.set_time(0)
+            self.media_player.play()
 
 
 class WebGridPlayer(QMainWindow):
@@ -621,8 +816,12 @@ class WebGridPlayer(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.grid_size = (2, 2)  # rows, cols
+        self.grid_size = (1, 1)  # rows, cols - default to 1x1 for single video
         self.players: List[VideoPlayer] = []
+        # Channel navigation state
+        self.channels: List[Dict[str, Any]] = []
+        self.channel_numbers: List[int] = []
+        self.current_channel_idx: int = 0
         self.current_volume = 70
         self.extractor = VideoStreamExtractor()
         self.thread_pool = ThreadPoolExecutor(max_workers=4)
@@ -635,8 +834,15 @@ class WebGridPlayer(QMainWindow):
         self.refresh_timer.timeout.connect(self.check_stream_refresh)
         self.refresh_timer.start(60000)  # Check every minute
         
+        self._fullscreen_active = False
+        # Load available channels from state/channels.json (if present)
+        self.load_channels()
         self.init_ui()
         self.create_grid()
+        # Defer button visibility update to next event loop so layout is ready
+        QTimer.singleShot(0, self.update_fullscreen_button_visibility)
+        # Start in fullscreen for 1x1 mode
+        QTimer.singleShot(100, self.enter_fullscreen)
     
     def init_ui(self):
         """Initialize the user interface."""
@@ -674,7 +880,232 @@ class WebGridPlayer(QMainWindow):
         
         # Status bar
         self.status_bar = self.statusBar()
-        self.status_bar.showMessage("Ready")    
+        self.status_bar.showMessage("Ready")
+
+        # Shortcuts for fullscreen and channel navigation
+        try:
+            self._esc_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+            self._esc_shortcut.activated.connect(self.exit_fullscreen)
+            self._f11_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F11), self)
+            self._f11_shortcut.activated.connect(self.toggle_fullscreen)
+            # Channel up/down: map multiple keys for reliability
+            # '=' and '+' → Channel Up
+            self._chan_up_equal = QShortcut(QKeySequence(Qt.Key.Key_Equal), self)
+            self._chan_up_equal.activated.connect(self.channel_up)
+            self._chan_up_plus = QShortcut(QKeySequence(Qt.Key.Key_Plus), self)
+            self._chan_up_plus.activated.connect(self.channel_up)
+            # '-' → Channel Down
+            self._chan_down_minus = QShortcut(QKeySequence(Qt.Key.Key_Minus), self)
+            self._chan_down_minus.activated.connect(self.channel_down)
+            # 'V' → Toggle Captions/Subtitles
+            self._caption_shortcut = QShortcut(QKeySequence(Qt.Key.Key_V), self)
+            self._caption_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            self._caption_shortcut.activated.connect(self.toggle_captions_global)
+            # 'L' → Toggle Loop
+            self._loop_shortcut = QShortcut(QKeySequence(Qt.Key.Key_L), self)
+            self._loop_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            self._loop_shortcut.activated.connect(self.toggle_loop_global)
+            # 'R' → Toggle Auto-Refresh
+            self._refresh_shortcut = QShortcut(QKeySequence(Qt.Key.Key_R), self)
+            self._refresh_shortcut.setContext(Qt.ShortcutContext.ApplicationShortcut)
+            self._refresh_shortcut.activated.connect(self.toggle_refresh_global)
+        except Exception:
+            pass
+
+    def enter_fullscreen(self):
+        """Enter fullscreen and hide chrome."""
+        if self._fullscreen_active and self.isFullScreen():
+            return
+        self._fullscreen_active = True
+        try:
+            if self.menuBar():
+                self.menuBar().setVisible(False)
+        except Exception:
+            pass
+        try:
+            if getattr(self, 'control_panel', None):
+                self.control_panel.setVisible(False)
+        except Exception:
+            pass
+        try:
+            if getattr(self, 'toggle_button', None):
+                self.toggle_button.setVisible(False)
+        except Exception:
+            pass
+        try:
+            if getattr(self, 'status_bar', None):
+                self.status_bar.setVisible(False)
+        except Exception:
+            pass
+        self.showFullScreen()
+
+    def exit_fullscreen(self):
+        """Exit fullscreen and restore chrome."""
+        if not self.isFullScreen() and not self._fullscreen_active:
+            return
+        self.showNormal()
+        try:
+            if self.menuBar():
+                self.menuBar().setVisible(True)
+        except Exception:
+            pass
+        try:
+            if getattr(self, 'control_panel', None):
+                self.control_panel.setVisible(self.control_panel_visible)
+        except Exception:
+            pass
+        try:
+            if getattr(self, 'toggle_button', None):
+                self.toggle_button.setVisible(True)
+        except Exception:
+            pass
+        try:
+            if getattr(self, 'status_bar', None):
+                self.status_bar.setVisible(True)
+        except Exception:
+            pass
+        self._fullscreen_active = False
+
+    def toggle_fullscreen(self):
+        """Toggle window fullscreen state."""
+        if self.isFullScreen():
+            self.exit_fullscreen()
+        else:
+            self.enter_fullscreen()
+
+    def get_primary_player(self) -> Optional[VideoPlayer]:
+        """Return the primary player to tune (first slot)."""
+        return self.players[0] if self.players else None
+
+    # ===== Channels: load + navigation =====
+    def load_channels(self):
+        """Load channels from state/channels.json into memory."""
+        try:
+            state_path = Path("state/channels.json")
+            if not state_path.exists():
+                return
+            with open(state_path, "r") as f:
+                data = json.load(f)
+            # channels.json is a dict of number -> {title, source_url, ...}
+            items = []
+            for num_str, info in data.items():
+                try:
+                    num = int(num_str)
+                except ValueError:
+                    continue
+                items.append({"number": num, **info})
+            # Sort by channel number
+            items.sort(key=lambda x: x["number"])
+            self.channels = items
+            self.channel_numbers = [c["number"] for c in items]
+            # Default to first channel
+            self.current_channel_idx = 0 if items else 0
+        except Exception as e:
+            print(f"Failed to load channels: {e}")
+
+    def tune_to_channel(self, idx: int):
+        """Tune to channel at index: extract streams or fallback to browser/direct."""
+        if not self.channels:
+            self.status_bar.showMessage("No channels available")
+            return
+        # Clamp index
+        idx = max(0, min(idx, len(self.channels) - 1))
+        self.current_channel_idx = idx
+        ch = self.channels[idx]
+        title = ch.get("title", f"Channel {ch.get('number')}")
+        src = ch.get("source_url") or ch.get("url")
+        if not src:
+            self.status_bar.showMessage("Channel has no source URL")
+            return
+        self.status_bar.showMessage(f"Tuning: {title}")
+        # Auto tune: extract in background and immediately play best stream
+        def worker():
+            try:
+                streams = self.extractor.extract_streams(src)
+            except Exception as e:
+                streams = []
+                print(f"Channel extract error: {e}")
+
+            # Choose best candidate
+            best = None
+            # Prefer HLS (.m3u8)
+            for s in streams:
+                if '.m3u8' in s.get('url', '').lower():
+                    best = s
+                    break
+            # Next, any direct video
+            if not best:
+                for s in streams:
+                    if s.get('type') in ('iframe_video', 'video'):
+                        best = s
+                        break
+            # Next, iframe
+            if not best and streams:
+                best = streams[0]
+
+            def apply():
+                player = self.get_primary_player()
+                if not player:
+                    return
+                if best and '.m3u8' in best.get('url', '').lower():
+                    player.load_media(best['url'], best.get('title'))
+                elif best and best.get('type') == 'iframe' and WEBENGINE_AVAILABLE:
+                    # Browser mode for iframe pages
+                    player.browser_mode = True
+                    player.mode_stack.setCurrentIndex(1)
+                    player.mode_button.setText("📺")
+                    player.mode_button.setToolTip("Switch to VLC mode")
+                    player.fullscreen_button.setVisible(self.is_single_grid())
+                    player.status_label.setText("🌐")
+                    player.load_url_in_browser(best['url'])
+                elif best:
+                    player.load_media(best['url'], best.get('title'))
+                else:
+                    # No streams → open source page in browser
+                    if WEBENGINE_AVAILABLE:
+                        self.add_url_to_browser_mode(src)
+                    else:
+                        self.add_url_to_grid(src)
+
+            QTimer.singleShot(0, apply)
+
+        # Run extraction in background
+        self.thread_pool.submit(worker)
+
+    def channel_up(self):
+        """Go to next channel (higher index)."""
+        if not self.channels:
+            self.load_channels()
+            if not self.channels:
+                return
+        self.tune_to_channel(self.current_channel_idx + 1)
+
+    def channel_down(self):
+        """Go to previous channel (lower index)."""
+        if not self.channels:
+            self.load_channels()
+            if not self.channels:
+                return
+        self.tune_to_channel(self.current_channel_idx - 1)
+
+    def toggle_captions_global(self):
+        """Toggle captions on the primary player."""
+        player = self.get_primary_player()
+        if player:
+            player.toggle_captions()
+
+    def toggle_loop_global(self):
+        """Toggle loop on the primary player."""
+        player = self.get_primary_player()
+        if player:
+            player.toggle_loop()
+
+    def toggle_refresh_global(self):
+        """Toggle auto-refresh on the primary player."""
+        player = self.get_primary_player()
+        if player:
+            player.toggle_auto_refresh()
+
     def show_context_menu(self, position):
         """Show context menu on right-click."""
         context_menu = QMenu(self)
@@ -695,6 +1126,22 @@ class WebGridPlayer(QMainWindow):
             browse_web_action = QAction('🌎 Browse Web Page...', self)
             browse_web_action.triggered.connect(self.browse_web_page)
             context_menu.addAction(browse_web_action)
+        
+        context_menu.addSeparator()
+
+        # Channel controls
+        chan_up_action = QAction('Ch+ Channel Up', self)
+        chan_up_action.triggered.connect(self.channel_up)
+        context_menu.addAction(chan_up_action)
+
+        chan_down_action = QAction('Ch- Channel Down', self)
+        chan_down_action.triggered.connect(self.channel_down)
+        context_menu.addAction(chan_down_action)
+        
+        # Fullscreen option
+        fullscreen_action = QAction('⛶ Toggle Fullscreen', self)
+        fullscreen_action.triggered.connect(self.toggle_fullscreen)
+        context_menu.addAction(fullscreen_action)
         
         context_menu.addSeparator()
         
@@ -758,11 +1205,22 @@ class WebGridPlayer(QMainWindow):
         
         # Web menu
         web_menu = menubar.addMenu('Web')
-        
         fetch_action = QAction('Fetch from Web Page...', self)
         fetch_action.setShortcut('Ctrl+F')
         fetch_action.triggered.connect(self.fetch_web_streams)
         web_menu.addAction(fetch_action)
+
+        # Channel menu
+        channel_menu = menubar.addMenu('Channel')
+        chan_up = QAction('Ch+ Channel Up', self)
+        chan_up.setShortcut('+')
+        chan_up.triggered.connect(self.channel_up)
+        channel_menu.addAction(chan_up)
+
+        chan_down = QAction('Ch- Channel Down', self)
+        chan_down.setShortcut('-')
+        chan_down.triggered.connect(self.channel_down)
+        channel_menu.addAction(chan_down)
     
     def create_control_panel(self):
         """Create the control panel."""
@@ -871,11 +1329,29 @@ class WebGridPlayer(QMainWindow):
             self.grid_layout.setColumnStretch(i, 1)
         
         self.status_bar.showMessage(f"Grid: {rows}×{cols} ({len(self.players)} screens)")
+        # Update fullscreen button visibility based on grid size
+        self.update_fullscreen_button_visibility()
     
     def change_grid_size(self, rows: int, cols: int):
         """Change the grid size."""
         self.grid_size = (rows, cols)
         self.create_grid()
+
+    def is_single_grid(self) -> bool:
+        """Return True if grid is 1×1."""
+        r, c = self.grid_size
+        return r == 1 and c == 1
+
+    def update_fullscreen_button_visibility(self):
+        """Show fullscreen button only in 1×1 grid."""
+        single = self.is_single_grid()
+        for p in self.players:
+            if hasattr(p, 'fullscreen_button'):
+                btn = p.fullscreen_button
+                if single:
+                    btn.show()  # Explicitly show
+                else:
+                    btn.hide()  # Explicitly hide
     
     def open_files(self):
         """Open file dialog to add local video files."""
@@ -902,12 +1378,19 @@ class WebGridPlayer(QMainWindow):
         """Show dialog to add a URL."""
         url, ok = QInputDialog.getText(self, 'Add URL', 'Enter video URL or webpage URL:')
         if ok and url:
+            # Ensure URL has protocol
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            
             # Check if URL is a direct video file
-            if any(url.lower().endswith(ext) for ext in ['.mp4', '.webm', '.ogg', '.avi', '.mov', '.flv', '.mkv', '.m3u8']):
-                # Direct video - load immediately
+            is_direct_video = any(url.lower().endswith(ext) for ext in ['.mp4', '.webm', '.ogg', '.avi', '.mov', '.flv', '.mkv'])
+            
+            # Direct video files - load immediately in VLC
+            if is_direct_video:
                 self.add_url_to_grid(url)
             else:
-                # Webpage - extract and show selection
+                # Everything else - try extraction and show preview dialog
+                # (works for streams, iframes, embedded videos, and websites)
                 self.extract_and_show_streams(url)
     
     def add_url_to_grid(self, url: str):
@@ -933,10 +1416,12 @@ class WebGridPlayer(QMainWindow):
             self.add_url_to_browser_mode(url)
     
     def extract_and_show_streams(self, url: str):
-        """Extract streams from URL and show selection dialog."""
+        """Extract streams from URL and show selection dialog, or load directly if only browser mode."""
+        print(f"\n>>> extract_and_show_streams() called with URL: {url}")
         self.status_bar.showMessage("Extracting video streams...")
         
         # Run extraction in background thread
+        print(f">>> Starting background extraction thread...")
         future = self.thread_pool.submit(self.extractor.extract_streams, url)
         
         # Show progress dialog
@@ -947,22 +1432,91 @@ class WebGridPlayer(QMainWindow):
         # Check for completion
         def check_completion():
             if future.done():
+                print(f">>> Extraction completed!")
                 progress.close()
                 try:
                     streams = future.result()
-                    if streams:
-                        self.show_stream_selection_dialog(streams, url)
-                        self.status_bar.showMessage("Stream extraction completed")
+                    print(f">>> Extracted {len(streams) if streams else 0} streams from {url}")
+                    
+                    if not streams:
+                        # No streams found - load URL directly in browser mode
+                        print(f">>> No streams found - calling load_url_directly()")
+                        self.load_url_directly(url)
+                        return
+                    
+                    # Check if we only got browser mode (no extractable streams)
+                    non_browser = [s for s in streams if s.get('type') != 'browser']
+                    print(f">>> Filtered streams: {len(non_browser)} non-browser, {len(streams)-len(non_browser)} browser-only")
+                    
+                    if not non_browser:
+                        # Only browser mode available - load directly
+                        print(f">>> Only browser mode available - calling load_url_directly()")
+                        self.load_url_directly(url)
                     else:
-                        # No streams found - offer browser mode option
-                        self.handle_no_streams_found(url)
+                        # Show dialog with extraction results
+                        print(f">>> Showing stream selection dialog with {len(non_browser)} streams")
+                        self.show_stream_selection_dialog(streams, url)
+                        self.status_bar.showMessage(f"Found {len(non_browser)} stream(s)")
+                        
                 except Exception as e:
-                    QMessageBox.warning(self, "Extraction Error", f"Failed to extract streams: {e}")
-                    self.status_bar.showMessage("Stream extraction failed")
+                    print(f"✗ Extraction error in check_completion: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # On error, try loading URL directly
+                    print(f">>> Failed to extract, calling load_url_directly(): {url}")
+                    self.load_url_directly(url)
             else:
                 QTimer.singleShot(100, check_completion)
         
         QTimer.singleShot(100, check_completion)
+    
+    def load_url_directly(self, url: str):
+        """Load a URL directly - in browser mode if no streams, or VLC if it's a direct video file."""
+        print(f"\n>>> load_url_directly() called with URL: {url}")
+        
+        # Find first available player
+        print(f">>> Looking for available player... (total players: {len(self.players)})")
+        available_player = None
+        for idx, player in enumerate(self.players):
+            print(f"    Player {idx}: current_url={player.current_url}")
+            if not player.current_url:
+                available_player = player
+                print(f"    ✓ Found available player at index {idx}")
+                break
+        
+        if not available_player:
+            print(f"✗ No available players found!")
+            QMessageBox.warning(self, "Grid Full", "All grid slots are occupied. Please clear a slot first.")
+            return
+        
+        # Check if it's a direct video file
+        is_direct_video = any(url.lower().endswith(ext) for ext in ['.mp4', '.webm', '.ogg', '.avi', '.mov', '.flv', '.mkv', '.m3u8', '.ts'])
+        print(f">>> is_direct_video={is_direct_video}, WEBENGINE_AVAILABLE={WEBENGINE_AVAILABLE}")
+        
+        try:
+            if is_direct_video or WEBENGINE_AVAILABLE is False:
+                # Load in VLC mode
+                print(f">>> Loading in VLC mode")
+                available_player.load_media(url)
+                self.status_bar.showMessage(f"Loading: {url}")
+            else:
+                # Load in browser mode for web pages
+                print(f">>> Loading in browser mode")
+                available_player.browser_mode = True
+                available_player.mode_stack.setCurrentIndex(1)
+                available_player.mode_button.setText("📺")
+                available_player.mode_button.setToolTip("Switch to VLC mode")
+                available_player.fullscreen_button.setVisible(self.is_single_grid())
+                available_player.status_label.setText("🌐")
+                available_player.load_url_in_browser(url)
+                self.status_bar.showMessage(f"Loading in browser mode: {url}")
+            
+            print(f"✓ Successfully loaded URL")
+        except Exception as e:
+            print(f"✗ Error loading URL: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Load Error", f"Failed to load URL: {e}")
     
     def fetch_web_streams(self):
         """Fetch video streams from a web page."""
@@ -1012,8 +1566,13 @@ class WebGridPlayer(QMainWindow):
                 QMessageBox.information(self, "No Streams Found", "No video streams were found on the page.")
             return
         
+        # Sort streams by priority: HLS first, then iframes, then others
+        priority_order = {'application/x-mpegURL': 0, 'hls': 0, 'iframe_hls': 1, 'iframe': 2, 
+                         'html5': 3, 'iframe_video': 4, 'browser': 5}
+        streams_sorted = sorted(streams, key=lambda s: (priority_order.get(s.get('type'), 99), streams.index(s)))
+        
         dialog = QDialog(self)
-        dialog.setWindowTitle(f"Select Video Stream ({len(streams)} found)")
+        dialog.setWindowTitle(f"Select Embedded Video ({len(streams_sorted)} found)")
         dialog.setModal(True)
         dialog.resize(1000, 600)
         
@@ -1022,13 +1581,13 @@ class WebGridPlayer(QMainWindow):
         
         # Left side - stream list
         left_layout = QVBoxLayout()
-        left_layout.addWidget(QLabel(f"Found {len(streams)} video stream(s). Select to preview:"))
+        left_layout.addWidget(QLabel(f"Found {len(streams_sorted)} video source(s). Click to select:"))
         
         # Stream table
         stream_table = QTableWidget()
         stream_table.setColumnCount(3)
         stream_table.setHorizontalHeaderLabels(["#", "Title", "Type"])
-        stream_table.setRowCount(len(streams))
+        stream_table.setRowCount(len(streams_sorted))
         stream_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         stream_table.setSelectionMode(QTableWidget.SelectionMode.ExtendedSelection)
         stream_table.horizontalHeader().setStretchLastSection(True)
@@ -1049,6 +1608,24 @@ class WebGridPlayer(QMainWindow):
             preview_player.set_hwnd(int(preview_widget.winId()))
         elif sys.platform == "darwin":
             preview_player.set_nsobject(int(preview_widget.winId()))
+        
+        # Populate table
+        for idx, stream in enumerate(streams_sorted):
+            item_num = QTableWidgetItem(str(idx + 1))
+            item_title = QTableWidgetItem(stream.get('title', 'Unknown'))
+            item_title.setData(Qt.ItemDataRole.UserRole, stream)  # Store stream data
+            item_type = QTableWidgetItem(stream.get('type', 'unknown').upper())
+            
+            # Color code by type
+            type_name = stream.get('type', '').lower()
+            if 'hls' in type_name or 'mpegURL' in type_name:
+                item_title.setForeground(QColor('green'))  # HLS streams in green
+            elif 'iframe' in type_name:
+                item_title.setForeground(QColor('blue'))   # Iframes in blue
+            
+            stream_table.setItem(idx, 0, item_num)
+            stream_table.setItem(idx, 1, item_title)
+            stream_table.setItem(idx, 2, item_type)
         
         # Selection changed handler
         def on_selection_changed():
@@ -1169,7 +1746,17 @@ class WebGridPlayer(QMainWindow):
             
             if available_players:
                 player = available_players[0]
-                player.load_media(stream['url'], stream['title'])
+                stream_type = stream.get('type', '').lower()
+                
+                # If it's a browser-mode stream, load in browser mode
+                if stream_type == 'browser':
+                    player.browser_mode = True
+                    player.mode_stack.setCurrentIndex(1)  # Switch to browser view
+                    player.mode_button.setStyleSheet("background-color: rgba(150,100,0,200); color: white; border: none; font-size: 10pt;")
+                    player.load_url_in_browser(stream['url'])
+                else:
+                    player.load_media(stream['url'], stream['title'])
+                
                 dialog.accept()
             else:
                 QMessageBox.warning(dialog, "Grid Full", "All grid slots are occupied. Please clear a slot first.")
@@ -1189,7 +1776,16 @@ class WebGridPlayer(QMainWindow):
                 title_item = table.item(row, 1)
                 stream = title_item.data(Qt.ItemDataRole.UserRole)
                 player = available_players[i]
-                player.load_media(stream['url'], stream['title'])
+                stream_type = stream.get('type', '').lower()
+                
+                # If it's a browser-mode stream, load in browser mode
+                if stream_type == 'browser':
+                    player.browser_mode = True
+                    player.mode_stack.setCurrentIndex(1)  # Switch to browser view
+                    player.mode_button.setStyleSheet("background-color: rgba(150,100,0,200); color: white; border: none; font-size: 10pt;")
+                    player.load_url_in_browser(stream['url'])
+                else:
+                    player.load_media(stream['url'], stream['title'])
                 
                 # Track source page for token refresh
                 if source_url:
@@ -1340,7 +1936,8 @@ class WebGridPlayer(QMainWindow):
         available_player.mode_stack.setCurrentIndex(1)
         available_player.mode_button.setText("📺")
         available_player.mode_button.setToolTip("Switch to VLC mode")
-        available_player.fullscreen_button.setVisible(True)
+        # Visible only in 1×1 grid
+        available_player.fullscreen_button.setVisible(self.is_single_grid())
         available_player.status_label.setText("🌐")
         
         # Load URL in browser
@@ -1500,7 +2097,7 @@ class WebGridPlayer(QMainWindow):
         event.accept()
     
     def check_stream_refresh(self):
-        \"\"\"Check if any active streams need token refresh.\"\"\"
+        """Check if any active streams need token refresh."""
         import time
         current_time = time.time()
         
@@ -1523,16 +2120,17 @@ class WebGridPlayer(QMainWindow):
                 # Check if stream needs refresh (refresh every 25 minutes for 30min tokens)
                 last_refresh = self.active_streams[url]['last_refresh']
                 if current_time - last_refresh > 1500:  # 25 minutes
-                    print(f\"🔄 Refreshing time-sensitive stream: {url}\")\n                    self.refresh_stream_token(player, url)
+                    print(f"🔄 Refreshing time-sensitive stream: {url}")
+                    self.refresh_stream_token(player, url)
     
     def refresh_stream_token(self, player, old_url):
-        \"\"\"Refresh a stream with expiring token.\"\"\"
+        """Refresh a stream with expiring token."""
         source_page = self.active_streams.get(old_url, {}).get('original_page')
         if not source_page:
-            print(\"⚠️  No source page available for token refresh\")
+            print("⚠️  No source page available for token refresh")
             return
             
-        print(f\"🔄 Extracting fresh streams from: {source_page}\")
+        print(f"🔄 Extracting fresh streams from: {source_page}")
         
         def refresh_worker():
             try:
@@ -1552,22 +2150,22 @@ class WebGridPlayer(QMainWindow):
                     # Update on main thread
                     QTimer.singleShot(0, lambda: self.apply_stream_refresh(player, new_stream, source_page))
                 else:
-                    print(\"⚠️  No fresh stream found for refresh\")
+                    print("⚠️  No fresh stream found for refresh")
                     
             except Exception as e:
-                print(f\"❌ Error refreshing stream: {e}\")
+                print(f"❌ Error refreshing stream: {e}")
         
         # Run in background
         self.thread_pool.submit(refresh_worker)
     
     def apply_stream_refresh(self, player, new_stream, source_page):
-        \"\"\"Apply refreshed stream to player.\"\"\"
+        """Apply refreshed stream to player."""
         import time
         
         old_url = player.current_url
         new_url = new_stream['url']
         
-        print(f\"✅ Applying refreshed stream: {new_stream['title']}\")
+        print(f"✅ Applying refreshed stream: {new_stream['title']}")
         
         # Load new stream
         if player.load_media(new_url, new_stream['title']):
@@ -1584,7 +2182,7 @@ class WebGridPlayer(QMainWindow):
             # Store source page reference in player
             player.source_page = source_page
             
-            print(f\"🎉 Stream refresh successful\")
+            print(f"🎉 Stream refresh successful")
 
 
 def main():

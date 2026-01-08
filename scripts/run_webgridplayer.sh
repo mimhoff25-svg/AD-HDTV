@@ -13,7 +13,7 @@ fi
 
 # Resolve project root (supports running from anywhere)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Auto-detect Chrome Remote Desktop display
 if [ -z "$DISPLAY" ]; then
@@ -21,13 +21,23 @@ if [ -z "$DISPLAY" ]; then
     CRD_DISPLAY=$(ps aux | grep "Xorg :" | grep -v grep | sed -n 's/.*Xorg \(:[0-9]*\).*/\1/p' | head -1)
     if [ -n "$CRD_DISPLAY" ]; then
         export DISPLAY="$CRD_DISPLAY"
+        export XAUTHORITY="$HOME/.Xauthority"
         echo "🖥️  Detected Chrome Remote Desktop display: $DISPLAY"
     else
         echo "⚠️  No DISPLAY variable set and no X server found"
         echo "   If using Chrome Remote Desktop, this should auto-detect"
         echo "   Try: export DISPLAY=:20"
+        echo "   Or run: bash scripts/run_with_xvfb.sh"
     fi
 fi
+
+# Ensure XAUTHORITY is set if not already
+if [ -z "$XAUTHORITY" ]; then
+    export XAUTHORITY="$HOME/.Xauthority"
+fi
+
+# Fix GDbus warnings (if running in restricted environment)
+export DBUS_SYSTEM_BUS_ADDRESS="unix:path=/var/run/dbus/system_bus_socket"
 
 # Prefer a local venv, then a workspace-level .venv, then gridplayer's venv.
 if [ -d "$PROJECT_ROOT/venv" ]; then
@@ -82,13 +92,10 @@ PY
 fi
 
 # Check if webgridplayer.py exists
-if [ -f "$PROJECT_ROOT/src/webgridplayer.py" ]; then
-    echo "🚀 Starting WebGridPlayer (src/webgridplayer.py)..."
-    python "$PROJECT_ROOT/src/webgridplayer.py"
-elif [ -f "$PROJECT_ROOT/webgridplayer.py" ]; then
-    echo "🚀 Starting WebGridPlayer (webgridplayer.py)..."
-    python "$PROJECT_ROOT/webgridplayer.py"
-else
-    echo "❌ Neither src/webgridplayer.py nor webgridplayer.py found in current directory."
+if [ ! -f "$PROJECT_ROOT/src/webgridplayer.py" ]; then
+    echo "❌ src/webgridplayer.py not found in current directory."
     exit 1
 fi
+
+echo "🚀 Starting WebGridPlayer..."
+python "$PROJECT_ROOT/src/webgridplayer.py"

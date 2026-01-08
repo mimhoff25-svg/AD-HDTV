@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0] - 2026-01-05
 
+## [1.1.1] - 2026-01-08
+
+### Added
+- Arrow-key navigation to move the highlighted (active) player around the grid.
+- Launcher `--diag-env` option to print active Python/venv + QtWebEngine availability.
+
+### Changed
+- Browser-mode placeholder now shows the active Python executable and `VIRTUAL_ENV` when QtWebEngine is unavailable (helps diagnose venv mismatches).
+
+### Fixed
+- Up/Down selection movement reliability by using window-level shortcuts (avoids focus swallowing in child controls).
+
 ### Added
 - **Browser Mode Functionality** 🌐
 - Embedded web browser in each player slot using QtWebEngine

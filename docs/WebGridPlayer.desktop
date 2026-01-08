@@ -1,0 +1,30 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=WebGridPlayer
+GenericName=Multi-Video Player
+Comment=VLC-based multi-video player with web stream extraction
+Icon=/home/mike/projects/webgridplayer/docs/webgridplayer.svg
+Exec=bash /home/mike/projects/webgridplayer/scripts/run_webgridplayer.sh
+Path=/home/mike/projects/webgridplayer
+Terminal=false
+StartupNotify=true
+MimeType=video/mp4;video/avi;video/mkv;video/mov;video/flv;video/wmv;video/webm;video/m4v;video/3gp;video/ogg;application/x-mpegurl;
+Categories=AudioVideo;Player;Video;
+Keywords=video;player;streaming;grid;multi-video;vlc;webcam;
+StartupWMClass=WebGridPlayer
+Actions=OpenURL;FetchWeb;
+
+[Desktop Action OpenURL]
+Name=Add Streaming URL
+Exec=bash /home/mike/projects/webgridplayer/scripts/run_webgridplayer.sh --add-url
+
+[Desktop Action FetchWeb]
+Name=Fetch Web Stream
+Exec=bash /home/mike/projects/webgridplayer/scripts/run_webgridplayer.sh --fetch-web
+Icon=webgridplayer
+
+[Desktop Action FetchWeb]
+Name=Fetch from Web Page
+Exec=/home/mike/projects/webgridplayer/run_webgridplayer.sh --fetch-web
+Icon=webgridplayer
