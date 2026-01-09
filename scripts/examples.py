@@ -1,39 +1,39 @@
 #!/usr/bin/env python3
 """
-WebGridPlayer Usage Examples
-Demonstrates how to use WebGridPlayer for various video sources
+AD-HDTV Usage Examples
+Demonstrates how to use AD-HDTV for various video sources
 """
 
 import sys
 import os
 
 def print_examples():
-    """Print usage examples for WebGridPlayer."""
+    """Print usage examples for AD-HDTV."""
     
     print("""
-🎥 WebGridPlayer Usage Examples
+🎥 AD-HDTV Usage Examples
 ================================
 
-WebGridPlayer is a powerful multi-video player that can play multiple videos
+AD-HDTV is a powerful multi-video player that can play multiple videos
 simultaneously in a grid layout, with advanced web stream extraction capabilities.
 
 📋 Basic Commands:
-   python webgridplayer.py                    # Start the application
-   ./run_webgridplayer.sh                    # Alternative startup script
+   python app.py                              # Start the application
+   ./run_adhdtv.sh                            # Alternative startup script
 
 🔧 Installation:
-   ./install_webgridplayer.sh                # Automated installation
+   ./install_adhdtv.sh                        # Automated installation
    pip install -r requirements.txt          # Manual dependency installation
 
 📺 Example 1: Playing Local Videos
-   1. Launch WebGridPlayer
+   1. Launch AD-HDTV
    2. Drag and drop video files onto the window, or
    3. File → Open Files... (Ctrl+O)
    4. Select multiple video files
    5. Use "Play All" to start synchronized playback
 
 🌐 Example 2: Web Stream Extraction (KIII Tower Cam)
-   1. Launch WebGridPlayer
+   1. Launch AD-HDTV
    2. Web → Fetch from Web Page... (Ctrl+F)
    3. Enter: https://www.kiiitv.com/tower-cam
    4. Wait for stream extraction
@@ -41,7 +41,7 @@ simultaneously in a grid layout, with advanced web stream extraction capabilitie
    6. Videos are added to the grid automatically
 
 🔗 Example 3: Direct Streaming URLs
-   1. Launch WebGridPlayer
+   1. Launch AD-HDTV
    2. File → Add URL... (Ctrl+U)
    3. Enter streaming URLs like:
       - HLS streams: http://example.com/stream.m3u8
@@ -130,7 +130,7 @@ simultaneously in a grid layout, with advanced web stream extraction capabilitie
    To extend functionality:
    • Modify VideoStreamExtractor for new site support
    • Add new video player features in VideoPlayer class
-   • Enhance UI in WebGridPlayer main class
+   • Enhance UI in AD-HDTV main class
 
 🎯 Real-World Use Cases:
 
@@ -147,7 +147,7 @@ simultaneously in a grid layout, with advanced web stream extraction capabilitie
    3. Test with simple video files first
    4. Check network connectivity for web extraction
 
-🎉 Enjoy using WebGridPlayer for your multi-video needs!
+🎉 Enjoy using AD-HDTV for your multi-video needs!
 """)
 
 if __name__ == "__main__":

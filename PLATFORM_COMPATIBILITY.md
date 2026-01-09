@@ -1,7 +1,7 @@
-# WebGridPlayer - Platform Compatibility Guide
+# AD-HDTV - Platform Compatibility Guide
 
 ## Overview
-WebGridPlayer is designed to run on **Linux, Windows, and macOS** with minimal platform-specific code.
+AD-HDTV is designed to run on **Linux, Windows, and macOS** with minimal platform-specific code.
 
 ## Platform Support Status
 
@@ -20,7 +20,7 @@ WebGridPlayer is designed to run on **Linux, Windows, and macOS** with minimal p
 - **Installation**: 
   ```batch
   pip install PyQt6 python-vlc requests beautifulsoup4
-  python webgridplayer.py
+  python app.py
   ```
 
 ### ✅ macOS (Compatible)
@@ -32,7 +32,7 @@ WebGridPlayer is designed to run on **Linux, Windows, and macOS** with minimal p
 - **Installation**:
   ```bash
   pip3 install PyQt6 python-vlc requests beautifulsoup4
-  python3 webgridplayer.py
+  python3 app.py
   ```
 
 ---
@@ -142,7 +142,7 @@ beautifulsoup4 >= 4.9.0
 ### Windows EXE (PyInstaller)
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed --icon=webgridplayer.ico --add-data "webgridplayer.svg;." webgridplayer.py
+pyinstaller --onefile --windowed --icon=adhdtv.svg --add-data "adhdtv.svg;." app.py
 ```
 
 ### macOS App Bundle (py2app)

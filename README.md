@@ -1,15 +1,15 @@
-# WebGridPlayer 🎥
+# AD-HDTV 🎥
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org)
-[![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![VLC Powered](https://img.shields.io/badge/powered%20by-VLC-orange.svg)](https://www.videolan.org/vlc/)
 [![Cross Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](PLATFORM_COMPATIBILITY.md)
 
-**WebGridPlayer** is a powerful VLC-based multi-video player with intelligent web stream extraction capabilities. Play multiple videos simultaneously in a customizable grid layout with synchronized controls, advanced video clipping, and automatic extraction of video streams from web pages.
+**AD-HDTV** (formerly WebGridPlayer) is a powerful VLC-based multi-video player with intelligent web stream extraction capabilities. Play multiple videos simultaneously in a customizable grid layout with synchronized controls, advanced video clipping, and automatic extraction of video streams from web pages.
 
 **🌍 Cross-Platform**: Works on Linux, Windows, and macOS - see [Platform Compatibility Guide](PLATFORM_COMPATIBILITY.md) for details.
 
-![WebGridPlayer Demo](https://via.placeholder.com/800x450/1e1e1e/ffffff?text=WebGridPlayer+Demo)
+![AD-HDTV Demo](https://via.placeholder.com/800x450/1e1e1e/ffffff?text=AD-HDTV+Demo)
 
 ## ✨ Key Features
 
@@ -37,24 +37,24 @@
 
 ### One-Line Installation
 ```bash
-curl -sSL https://raw.githubusercontent.com/yourusername/webgridplayer/main/install_webgridplayer.sh | bash
+curl -sSL https://raw.githubusercontent.com/yourusername/adhdtv/main/install_adhdtv.sh | bash
 ```
 
 ### Manual Installation
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/webgridplayer.git
-cd webgridplayer
+git clone https://github.com/yourusername/adhdtv.git
+cd adhdtv
 
 # Run the installation script
-./install_webgridplayer.sh
+./install_adhdtv.sh
 
-# Launch WebGridPlayer
-./run_webgridplayer.sh
+# Launch AD-HDTV
+./run_adhdtv.sh
 ```
 
 ### Desktop Integration
-After installation, you can add WebGridPlayer to your system's application menu:
+After installation, you can add AD-HDTV to your system's application menu:
 
 ```bash
 # Install desktop integration (application menu entry and icon)
@@ -62,10 +62,13 @@ After installation, you can add WebGridPlayer to your system's application menu:
 ```
 
 This will:
-- Add WebGridPlayer to your application menu (Audio & Video category)
+- Add AD-HDTV to your application menu (Audio & Video category)
 - Create a desktop shortcut (optional)
-- Associate WebGridPlayer with video file types
+- Associate AD-HDTV with video file types
 - Install the application icon
+
+### Profiles
+Use `python app.py --profile dev|demo|live` or set `ADHDTV_PROFILE` to load config overrides from `config/profiles/`.
 
 ## 📋 System Requirements
 
@@ -98,14 +101,14 @@ brew install vlc python3
 1. Download and install VLC from [videolan.org](https://www.videolan.org/vlc/)
 2. Download and install Python 3.8+ from [python.org](https://python.org)
 3. Install dependencies: `pip install PyQt6 python-vlc requests beautifulsoup4`
-4. Run: `python webgridplayer.py`
+4. Run: `python app.py`
 
 ## 🎯 Usage Examples
 
 ### Example 1: Web Stream Extraction
 ```bash
-# Launch WebGridPlayer
-python webgridplayer.py
+# Launch AD-HDTV
+python app.py
 
 # In the app:
 # 1. Web → Fetch from Web Page...
@@ -215,8 +218,8 @@ pip install PyQt5
 
 ### Debug Mode
 ```bash
-# Run with verbose output
-python webgridplayer.py --debug
+# Run with verbose output (dev profile)
+python app.py --profile dev
 
 # Test stream extraction only
 python test_stream_extraction.py
@@ -224,9 +227,12 @@ python test_stream_extraction.py
 
 ## 🏗️ Development
 
+### Architecture and Flow
+See `docs/ARCHITECTURE.md` for the lifecycle, state flow, and channel layout.
+
 ### Architecture Overview
 ```
-WebGridPlayer/
+AD-HDTV/
 ├── GUI Layer (PyQt6/5)
 ├── Media Engine (VLC/libvlc) 
 ├── Web Extraction (BeautifulSoup + requests)
@@ -242,14 +248,14 @@ WebGridPlayer/
 
 ### Building from Source
 ```bash
-git clone https://github.com/yourusername/webgridplayer.git
-cd webgridplayer
+git clone https://github.com/yourusername/adhdtv.git
+cd adhdtv
 python -m venv venv
 source venv/bin/activate  # Linux/macOS
 # or
 venv\Scripts\activate     # Windows
 pip install -r requirements.txt
-python webgridplayer.py
+python app.py
 ```
 
 ## 🎪 Use Cases
@@ -282,7 +288,7 @@ python webgridplayer.py
 ## 🔐 Security & Privacy
 
 ### Data Handling
-- **No Data Collection**: WebGridPlayer doesn't collect or transmit user data
+- **No Data Collection**: AD-HDTV doesn't collect or transmit user data
 - **Local Processing**: All video processing happens locally
 - **Network Requests**: Only made when explicitly fetching web streams
 - **Privacy First**: No analytics, tracking, or telemetry
@@ -290,7 +296,7 @@ python webgridplayer.py
 ### Web Scraping Ethics
 - **Respectful**: Follows robots.txt guidelines
 - **Rate Limited**: Reasonable request delays
-- **User Agent**: Identifies as WebGridPlayer
+- **User Agent**: Identifies as AD-HDTV
 - **Legal Compliance**: Users responsible for content access rights
 
 ## 📄 License
@@ -315,25 +321,25 @@ This project is licensed under the **GNU General Public License v3.0** - see the
 
 ### Getting Help
 - **📖 Documentation**: Check the [examples.py](examples.py) file
-- **🐛 Bug Reports**: [Open an issue](https://github.com/yourusername/webgridplayer/issues)
-- **💡 Feature Requests**: [Discussion forum](https://github.com/yourusername/webgridplayer/discussions)
-- **❓ Questions**: Stack Overflow with `webgridplayer` tag
+- **🐛 Bug Reports**: [Open an issue](https://github.com/yourusername/adhdtv/issues)
+- **💡 Feature Requests**: [Discussion forum](https://github.com/yourusername/adhdtv/discussions)
+- **❓ Questions**: Stack Overflow with `adhdtv` tag
 
 ### Sponsor This Project
-If WebGridPlayer saves you time or enhances your workflow:
+If AD-HDTV saves you time or enhances your workflow:
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow.svg)](https://buymeacoffee.com/webgridplayer)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow.svg)](https://buymeacoffee.com/adhdtv)
 [![GitHub Sponsors](https://img.shields.io/badge/GitHub-sponsor-red.svg)](https://github.com/sponsors/yourusername)
 
 ---
 
 <div align="center">
 
-**[⬆ Back to Top](#webgridplayer-)**
+**[⬆ Back to Top](#ad-hdtv-)**
 
 Made with ❤️ for the video streaming community
 
-[![Star this repo](https://img.shields.io/github/stars/yourusername/webgridplayer?style=social)](https://github.com/yourusername/webgridplayer/stargazers)
+[![Star this repo](https://img.shields.io/github/stars/yourusername/adhdtv?style=social)](https://github.com/yourusername/adhdtv/stargazers)
 [![Follow @yourusername](https://img.shields.io/twitter/follow/yourusername?style=social)](https://twitter.com/yourusername)
 
 </div>

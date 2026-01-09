@@ -5,9 +5,13 @@ Test grid switching and solo mode fixes
 
 import os
 import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_PATH = PROJECT_ROOT / "src" / "webgridplayer.py"
 
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 print("\n" + "=" * 70)
 print("TESTING GRID SWITCH & SOLO MODE FIXES")
@@ -17,7 +21,7 @@ print("=" * 70)
 print("\n1️⃣  Testing channel number preservation in state...")
 print("-" * 70)
 
-with open('/home/mike/projects/webgridplayer/src/webgridplayer.py', 'r') as f:
+with open(SOURCE_PATH, 'r') as f:
     content = f.read()
 
 # Check if current_channel_number is saved in state

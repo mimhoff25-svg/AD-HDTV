@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-WebGridPlayer - A VLC-based multi-video player with web stream extraction capabilities
-Author: WebGridPlayer Development Team
-License: GPL-3.0
+AD-HDTV - A VLC-based multi-video player with web stream extraction capabilities
+Author: AD-HDTV Development Team
+License: MIT
 """
 
 import sys
@@ -21,6 +21,11 @@ from typing import List, Dict, Optional, Tuple, Any
 from urllib.parse import urljoin, urlparse
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
+
+APP_NAME = "AD-HDTV"
+LOGGER_NAME = "adhdtv"
+ACTION_LOGGER_NAME = "adhdtv.actions"
+KNOWN_ERRORS_LOGGER_NAME = "adhdtv.known_errors"
 
 try:
     from PyQt6.QtWidgets import *
@@ -90,19 +95,31 @@ except ImportError:
     sys.exit(1)
 
 
-def setup_logging():
-    """Setup comprehensive logging for WebGridPlayer."""
+def _slugify_app_name(app_name: str) -> str:
+    safe = app_name.strip().lower().replace(" ", "_")
+    return safe or "app"
+
+
+def setup_logging(app_name: str = APP_NAME, log_level: str = "INFO") -> Tuple[logging.Logger, logging.Logger]:
+    """Setup comprehensive logging for AD-HDTV."""
     # Create logs directory
     logs_dir = Path("logs")
     logs_dir.mkdir(exist_ok=True)
     
     # Setup main logger
-    logger = logging.getLogger('webgridplayer')
-    logger.setLevel(logging.DEBUG)
+    logger = logging.getLogger(LOGGER_NAME)
+    action_logger = logging.getLogger(ACTION_LOGGER_NAME)
+    if getattr(logger, "_adhdtv_configured", False):
+        return logger, action_logger
+
+    level = getattr(logging, str(log_level).upper(), logging.INFO)
+    logger.setLevel(level)
     
     # Remove existing handlers to avoid duplicates
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
+    for handler in action_logger.handlers[:]:
+        action_logger.removeHandler(handler)
     
     # Create formatters
     detailed_formatter = logging.Formatter(
@@ -112,7 +129,8 @@ def setup_logging():
     
     # File handler for all logs
     today = datetime.now().strftime("%Y%m%d")
-    main_log_file = logs_dir / f"webgridplayer_{today}.log"
+    log_prefix = _slugify_app_name(app_name)
+    main_log_file = logs_dir / f"{log_prefix}_{today}.log"
     file_handler = logging.FileHandler(main_log_file)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(detailed_formatter)
@@ -125,7 +143,6 @@ def setup_logging():
     action_handler.setFormatter(simple_formatter)
     
     # Create action logger
-    action_logger = logging.getLogger('webgridplayer.actions')
     action_logger.setLevel(logging.INFO)
     action_logger.addHandler(action_handler)
     action_logger.addHandler(file_handler)  # Also log to main file
@@ -144,11 +161,13 @@ def setup_logging():
     logger.addHandler(console_handler)
     
     # Log startup
-    logger.info("WebGridPlayer logging system initialized")
+    logger.info("%s logging system initialized", app_name)
     action_logger.info("Application started")
+    logger._adhdtv_configured = True
+    return logger, action_logger
     
 
-def _load_logo_pixmap(url: str, target_size: QSize, ua: str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) WebGridPlayer/1.0") -> Tuple[Optional[QPixmap], str]:
+def _load_logo_pixmap(url: str, target_size: QSize, ua: str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) AD-HDTV/1.0") -> Tuple[Optional[QPixmap], str]:
     """Fetch logo from URL (png/jpg/svg) and return (pixmap, error_message)."""
     if not url:
         return None, ""
@@ -219,12 +238,9 @@ def _fallback_text_logo(text: str, target_size: QSize) -> QPixmap:
     painter.end()
     return pixmap
 
-    return logger
-
-
-# Initialize logging
-app_logger = setup_logging()
-action_logger = logging.getLogger('webgridplayer.actions')
+# Initialize default loggers (configured via setup_logging in app entrypoint)
+app_logger = logging.getLogger(LOGGER_NAME)
+action_logger = logging.getLogger(ACTION_LOGGER_NAME)
 
 # Known error patterns for automatic recognition
 KNOWN_ERRORS = {
@@ -313,7 +329,7 @@ def log_error_with_context(error_message: str, context: str = '', exception: Exc
     app_logger.error(log_entry)
     
     # Also create a specific known errors log entry
-    known_errors_logger = logging.getLogger('webgridplayer.known_errors')
+    known_errors_logger = logging.getLogger(KNOWN_ERRORS_LOGGER_NAME)
     if not known_errors_logger.handlers:
         logs_dir = Path("logs")
         today = datetime.now().strftime("%Y%m%d")
@@ -335,6 +351,7 @@ class VideoStreamExtractor:
     """Extracts video streams from web pages."""
     
     def __init__(self):
+        self.logger = logging.getLogger(f"{LOGGER_NAME}.extractor")
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -352,7 +369,7 @@ class VideoStreamExtractor:
 
         stream_name = (stream_node.get('name') or stream_node.get('data-name') or stream_node.text or '').strip()
         if not stream_name:
-            print("Stream name element not found or invalid.")
+            self.logger.debug("Stream name element not found or invalid.")
             return streams
 
         token_url = urljoin(page_url, f"/token/{stream_name}")
@@ -362,7 +379,7 @@ class VideoStreamExtractor:
             data = token_resp.json()
             stream_url = data.get('url') if isinstance(data, dict) else None
             if not stream_url:
-                print("m3u8 URL not found in the response.")
+                self.logger.debug("m3u8 URL not found in the response.")
                 return streams
 
             streams.append({
@@ -388,7 +405,7 @@ class VideoStreamExtractor:
             soup = BeautifulSoup(response.content, 'html.parser')
             streams = []
             
-            print(f"\n=== Extracting from: {url} ===")
+            self.logger.debug("Extracting from: %s", url)
 
             # Method -1: Detect Video.js / blob-based playback (requires browser rendering)
             blob_videos = re.findall(r'blob:[a-zA-Z0-9-_:/]+', response.text)
@@ -409,12 +426,12 @@ class VideoStreamExtractor:
 
             # Method 1: Find iframes with video sources and try to extract from them
             iframes = soup.find_all('iframe')
-            print(f"Found {len(iframes)} iframes")
+            self.logger.debug("Found %d iframes", len(iframes))
             for idx, iframe in enumerate(iframes, 1):
                 src = iframe.get('src') or iframe.get('data-src') or iframe.get('data-lazy-src')
                 if src:
                     abs_src = urljoin(url, src)
-                    print(f"  Iframe #{idx}: {abs_src}")
+                    self.logger.debug("Iframe #%d: %s", idx, abs_src)
                     
                     # Add iframe URL
                     streams.append({
@@ -438,7 +455,7 @@ class VideoStreamExtractor:
                                     'type': 'iframe_video',
                                     'title': f'🎥 Video from Iframe #{idx}'
                                 })
-                                print(f"    Found video in iframe: {v_src}")
+                                self.logger.debug("Found video in iframe: %s", v_src)
                         
                         # Look for .m3u8 in iframe
                         iframe_m3u8 = re.findall(r'https?://[^\s"\'<>]+\.m3u8(?:\?[^\s"\'<>]*)?', 
@@ -450,26 +467,26 @@ class VideoStreamExtractor:
                                     'type': 'iframe_hls',
                                     'title': f'📡 HLS from Iframe #{idx}'
                                 })
-                                print(f"    Found HLS in iframe: {m3u8_url}")
+                                self.logger.debug("Found HLS in iframe: %s", m3u8_url)
                     except Exception as e:
                         error_msg = f"Iframe stream extraction failed"
                         log_error_with_context(error_msg, f"Iframe src: {abs_src}", e)
             
             # Method 2: Find HTML5 video tags with all attributes
             video_tags = soup.find_all('video')
-            print(f"Found {len(video_tags)} video tags")
+            self.logger.debug("Found %d video tags", len(video_tags))
             for idx, video in enumerate(video_tags, 1):
                 # Get video ID for better identification
                 video_id = video.get('id', f'video-{idx}')
                 video_class = video.get('class', [])
                 video_class_str = ' '.join(video_class) if isinstance(video_class, list) else str(video_class)
                 
-                print(f"  Video #{idx}: id='{video_id}', class='{video_class_str}'")
+                self.logger.debug("Video #%d: id='%s', class='%s'", idx, video_id, video_class_str)
                 
                 # Check direct src attribute
                 src = video.get('src') or video.get('data-src') or video.get('data-video-src')
                 if src:
-                    print(f"    src: {src[:100]}")
+                    self.logger.debug("Video src: %s", src[:100])
                     if not src.startswith('blob:'):
                         streams.append({
                             'url': urljoin(url, src),
@@ -482,7 +499,7 @@ class VideoStreamExtractor:
                 for s_idx, source in enumerate(sources, 1):
                     src = source.get('src') or source.get('data-src')
                     if src:
-                        print(f"    source[{s_idx}]: {src[:100]}")
+                        self.logger.debug("Video source[%d]: %s", s_idx, src[:100])
                         if not src.startswith('blob:'):
                             streams.append({
                                 'url': urljoin(url, src),
@@ -678,8 +695,8 @@ class VideoPlayer(QFrame):
     def log_event(self, event: str, **kwargs):
         """Standardized logging for player actions.
         Writes to both core and actions loggers with consistent context."""
-        logger = logging.getLogger('webgridplayer')
-        action_logger = logging.getLogger('webgridplayer.actions')
+        logger = logging.getLogger(LOGGER_NAME)
+        action_logger = logging.getLogger(ACTION_LOGGER_NAME)
         try:
             context = {
                 'player': getattr(self, 'display_id', self.player_id + 1),
@@ -1084,7 +1101,7 @@ class VideoPlayer(QFrame):
         main_window = self.get_main_window()
         if not main_window:
             return
-        logger = logging.getLogger('webgridplayer')
+        logger = logging.getLogger(LOGGER_NAME)
         self.status_label.setText("🔍 Re-extracting...")
         future = main_window.thread_pool.submit(main_window.extractor.extract_streams, self.source_url)
         
@@ -1130,8 +1147,8 @@ class VideoPlayer(QFrame):
     
     def save_to_channel(self):
         """Save current URL to a channel number."""
-        logger = logging.getLogger('webgridplayer')
-        action_logger = logging.getLogger('webgridplayer.actions')
+        logger = logging.getLogger(LOGGER_NAME)
+        action_logger = logging.getLogger(ACTION_LOGGER_NAME)
         
         if not self.current_url:
             logger.warning(f"Player {self.player_id}: Attempted to save empty URL to channel")
@@ -1283,8 +1300,8 @@ class VideoPlayer(QFrame):
                     self.load_media(new_url, title=current_title, source_url=self.source_url)
                 
                 # Log the URL change
-                logger = logging.getLogger('webgridplayer')
-                action_logger = logging.getLogger('webgridplayer.actions')
+                logger = logging.getLogger(LOGGER_NAME)
+                action_logger = logging.getLogger(ACTION_LOGGER_NAME)
                 self.log_event('edit_url', new_url=new_url)
     
     def toggle_play_pause(self):
@@ -1452,8 +1469,8 @@ class VideoPlayer(QFrame):
             title: Optional display title
             source_url: Optional source webpage URL where stream was extracted from
         """
-        logger = logging.getLogger('webgridplayer')
-        action_logger = logging.getLogger('webgridplayer.actions')
+        logger = logging.getLogger(LOGGER_NAME)
+        action_logger = logging.getLogger(ACTION_LOGGER_NAME)
         
         try:
             # Lazily initialize VLC on first use
@@ -1511,7 +1528,7 @@ class VideoPlayer(QFrame):
                     self.media.add_option(':http-reconnect')
                     # Try hardware acceleration if available
                     self.media.add_option(':avcodec-hw=any')
-                    print(f"Applied HLS optimizations for: {url[:50]}...")
+                    logger.info("Applied HLS optimizations for: %s", url[:50])
             else:
                 self.media = self.vlc_instance.media_new_path(url)
             
@@ -1545,18 +1562,19 @@ class VideoPlayer(QFrame):
             # After initial load, verify playback and attempt re-extraction if needed
             QTimer.singleShot(3000, self._check_playback_and_retry)
             
-            print(f"📺 Loading media in VLC player {self.player_id}: {url}")
+            logger.info("Loading media in VLC player %s: %s", self.player_id, url)
             # If eligible, start token refresh monitoring
             self._maybe_start_token_refresh()
             return True
             
         except Exception as e:
-            print(f"Error loading media {url}: {e}")
+            logger.error("Error loading media %s: %s", url, e)
             self.status_label.setText("Load Error")
             return False
     
     def play(self):
         """Play the media."""
+        logger = logging.getLogger(LOGGER_NAME)
         if self.media_player and self.media:
             try:
                 result = self.media_player.play()
@@ -1566,10 +1584,10 @@ class VideoPlayer(QFrame):
                     # Enforce current audio policy (solo/manual mute)
                     self._apply_audio_policy()
                     
-                    print(f"🎬 Started playing in player {self.player_id}")
+                    logger.info("Started playing in player %s", self.player_id)
                 else:
                     self.status_label.setText("❌ Play Failed") 
-                    print(f"❌ Play failed for player {self.player_id}, result: {result}")
+                    logger.warning("Play failed for player %s, result: %s", self.player_id, result)
                 
                 # Handle clipping
                 if self.is_clipped and self.start_time > 0:
@@ -1577,10 +1595,10 @@ class VideoPlayer(QFrame):
                     QTimer.singleShot(100, lambda: self.media_player.set_time(int(self.start_time * 1000)))
             except Exception as e:
                 self.status_label.setText("❌ Error")
-                print(f"❌ Error playing media in player {self.player_id}: {e}")
+                logger.error("Error playing media in player %s: %s", self.player_id, e)
         else:
             self.status_label.setText("❌ No Media")
-            print(f"⚠️ No media loaded in player {self.player_id}")
+            logger.warning("No media loaded in player %s", self.player_id)
     
     def pause(self):
         """Pause the media."""
@@ -1596,6 +1614,7 @@ class VideoPlayer(QFrame):
     
     def cleanup(self):
         """Clean up VLC resources for grid switching."""
+        logger = logging.getLogger(LOGGER_NAME)
         try:
             # Stop playback and clear media
             if self.media_player:
@@ -1620,10 +1639,11 @@ class VideoPlayer(QFrame):
                 self.token_refresh_timer = None
             
         except Exception as e:
-            print(f"Error during VideoPlayer cleanup for player {self.player_id}: {e}")
+            logger.error("Error during VideoPlayer cleanup for player %s: %s", self.player_id, e)
     
     def destroy_vlc(self):
         """Completely destroy VLC resources when player is being removed permanently."""
+        logger = logging.getLogger(LOGGER_NAME)
         try:
             # Stop monitoring timer
             if hasattr(self, 'monitor_timer') and self.monitor_timer:
@@ -1669,7 +1689,7 @@ class VideoPlayer(QFrame):
                 self.vlc_instance = None
                 
         except Exception as e:
-            print(f"Error destroying VLC for player {self.player_id}: {e}")
+            logger.error("Error destroying VLC for player %s: %s", self.player_id, e)
 
     def _apply_audio_policy(self):
         """Delegate audio policy enforcement to main window."""
@@ -1781,8 +1801,8 @@ class VideoPlayer(QFrame):
                 main_window.status_bar.showMessage(f"Solo Mode OFF - All players restored")
         
         # Log the solo action
-        logger = logging.getLogger('webgridplayer')
-        action_logger = logging.getLogger('webgridplayer.actions')
+        logger = logging.getLogger(LOGGER_NAME)
+        action_logger = logging.getLogger(ACTION_LOGGER_NAME)
         logger.info(f"Player {self.player_id}: Solo {'activated' if self.is_solo else 'deactivated'}")
         action_logger.info(f"Player {self.player_id}: Solo {'ON' if self.is_solo else 'OFF'}")
     
@@ -1917,7 +1937,7 @@ class VideoPlayer(QFrame):
             if state not in [vlc.State.Playing, vlc.State.Opening, vlc.State.Buffering]:
                 if self.source_url:
                     import time
-                    logger = logging.getLogger('webgridplayer')
+                    logger = logging.getLogger(LOGGER_NAME)
                     # If this is the initial load (no refresh yet), jump to re-extraction path
                     if self.refresh_attempt_count == 0:
                         self.last_refresh_time = time.time()
@@ -1976,7 +1996,7 @@ class VideoPlayer(QFrame):
                 
                 # Only trigger recovery after confirming error persists
                 if self.consecutive_error_count >= 2 and self.auto_recovery_count < self.max_auto_recovery_attempts:
-                    logger = logging.getLogger('webgridplayer')
+                    logger = logging.getLogger(LOGGER_NAME)
                     logger.warning(f"Player {self.player_id}: Stream died (state={state}), attempting auto-recovery")
                     
                     self.auto_recovery_count += 1
@@ -1990,7 +2010,7 @@ class VideoPlayer(QFrame):
             self.last_known_state = state
             
         except Exception as e:
-            logger = logging.getLogger('webgridplayer')
+            logger = logging.getLogger(LOGGER_NAME)
             logger.error(f"Player {self.player_id}: Monitor error: {e}")
     
     def auto_recover_stream(self):
@@ -2000,7 +2020,7 @@ class VideoPlayer(QFrame):
         if self.is_reextracting:
             return
         
-        logger = logging.getLogger('webgridplayer')
+        logger = logging.getLogger(LOGGER_NAME)
         self.log_event('auto_recover_attempt', attempt=self.auto_recovery_count, max=self.max_auto_recovery_attempts)
         
         self.status_label.setText("🔄 Auto-recovering...")
@@ -2084,7 +2104,7 @@ class VideoPlayer(QFrame):
                 # Default interval: 5 minutes
                 self.token_refresh_timer.start(5 * 60 * 1000)
         except Exception as e:
-            logger = logging.getLogger('webgridplayer')
+            logger = logging.getLogger(LOGGER_NAME)
             logger.error(f"Player {self.player_id}: Failed to start token refresh: {e}")
 
     def _token_refresh_tick(self):
@@ -2101,7 +2121,7 @@ class VideoPlayer(QFrame):
             if not main_window:
                 return
 
-            logger = logging.getLogger('webgridplayer')
+            logger = logging.getLogger(LOGGER_NAME)
             logger.info(f"Player {self.player_id}: Token refresh tick - checking for updated stream URL")
 
             # Run extraction in background
@@ -2143,7 +2163,7 @@ class VideoPlayer(QFrame):
 
             QTimer.singleShot(100, handle_refresh)
         except Exception as e:
-            logger = logging.getLogger('webgridplayer')
+            logger = logging.getLogger(LOGGER_NAME)
             logger.error(f"Player {self.player_id}: Token refresh tick failed: {e}")
 
     
@@ -2168,7 +2188,7 @@ class VideoPlayer(QFrame):
         self.web_view.setUrl(QUrl(url))
         self.current_url = url
         self.set_display_text(f"Browser: {url}")
-        print(f"🌐 Loading in browser: {url}")
+        logging.getLogger(LOGGER_NAME).info("Loading in browser: %s", url)
 
     def _ensure_web_view(self) -> bool:
         """Create QWebEngineView on-demand and swap it into the mode stack."""
@@ -2197,7 +2217,7 @@ class VideoPlayer(QFrame):
             self.mode_stack.insertWidget(1, self.web_view)
             return True
         except Exception:
-            logger = logging.getLogger('webgridplayer')
+            logger = logging.getLogger(LOGGER_NAME)
             logger.exception("Failed to initialize WebEngine view")
             self.web_view = None
             return False
@@ -2310,23 +2330,50 @@ class VideoPlayer(QFrame):
         return []
 
 
-class WebGridPlayer(QMainWindow):
+class ADHDTVPlayer(QMainWindow):
     """Main application window."""
     
-    def __init__(self):
+    def __init__(self, app_state: Optional[Any] = None, config: Optional[Dict[str, Any]] = None):
         super().__init__()
-        self.logger = logging.getLogger('webgridplayer')
-        self.action_logger = logging.getLogger('webgridplayer.actions')
-        
-        self.grid_size = (1, 1)  # rows, cols - default to 1x1 for single video
+        self.app_state = app_state
+        self.config = config or {}
+        self.logger = logging.getLogger(LOGGER_NAME)
+        self.action_logger = logging.getLogger(ACTION_LOGGER_NAME)
+
+        window_geometry = self.config.get("window_geometry", {})
+        self.window_title = self.config.get(
+            "window_title", f"{APP_NAME} - Multi-Video Player"
+        )
+        self.window_geometry = {
+            "x": int(window_geometry.get("x", 100)),
+            "y": int(window_geometry.get("y", 100)),
+            "width": int(window_geometry.get("width", 1200)),
+            "height": int(window_geometry.get("height", 800)),
+        }
+
+        default_grid = self.config.get("default_grid", [1, 1])
+        if isinstance(default_grid, (list, tuple)) and len(default_grid) == 2:
+            self.grid_size = (int(default_grid[0]), int(default_grid[1]))
+        else:
+            self.grid_size = (1, 1)
         self.players: List[VideoPlayer] = []
         self.active_player: Optional[VideoPlayer] = None
-        self.current_volume = 70
+        self.current_volume = int(self.config.get("default_volume", 70))
         self.extractor = VideoStreamExtractor()
         # Increase thread pool for better 8-video performance
         self.thread_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix='webgrid')
-        self.control_panel_visible = True
+        self._prewarm_thread = None
+        self.control_panel_visible = bool(self.config.get("control_panel_visible", True))
         self.control_panel = None
+        self.tick_rate_hz = int(self.config.get("tick_rate_hz", 60))
+        self.debug_overlay_enabled = bool(self.config.get("debug_overlay", False)) or bool(
+            getattr(app_state, "debug", False)
+        )
+        self.display_mode = self.config.get("display", {}).get("mode", "windowed")
+        self.display_resolution = None
+        resolution = self.config.get("display", {}).get("resolution")
+        if isinstance(resolution, (list, tuple)) and len(resolution) == 2:
+            self.display_resolution = (int(resolution[0]), int(resolution[1]))
         
         # Performance monitoring for 8-video optimization
         self.performance_stats = {
@@ -2341,7 +2388,7 @@ class WebGridPlayer(QMainWindow):
         self.performance_timer = QTimer()
         self.performance_timer.timeout.connect(self._monitor_performance)
         
-        self.logger.info("WebGridPlayer main window initialized")
+        self.logger.info("AD-HDTV main window initialized")
         self.action_logger.info("Application window created")
         # Favorites storage
         self.favorites: List[Dict[str, str]] = []  # [{url, title}]
@@ -2355,14 +2402,16 @@ class WebGridPlayer(QMainWindow):
         self.channels: Dict[int, Dict[str, str]] = {}  # {number: {url, title}}
         self.channels_file = Path("state/channels.json")
         self.channels_file.parent.mkdir(parents=True, exist_ok=True)
-        self.current_channel: Optional[int] = None
+        self.current_channel: Optional[int] = getattr(app_state, "current_channel", None)
         self._channel_entry_buffer: str = ""
         self._channel_entry_timer = QTimer()
         self._channel_entry_timer.setSingleShot(True)
         self._channel_entry_timer.setInterval(1500)  # 1.5s to commit typed numbers
         self._channel_entry_timer.timeout.connect(self._commit_channel_buffer)
         # Lineup label for user tracking (e.g., "Spectrum Corpus Christi")
-        self.channel_lineup_label: str = ""
+        self.channel_lineup_label: str = self.config.get("channels", {}).get(
+            "lineup_label", ""
+        )
         
         # Track time-sensitive streams for refresh
         self.active_streams = {}  # {url: {'last_refresh': timestamp, 'original_url': url}}
@@ -2378,10 +2427,13 @@ class WebGridPlayer(QMainWindow):
         self._last_channel_tune_time = 0
 
         # EPG source (open-source, free). Default to IPTV-Org US guide; can be swapped to any iptv-org guide URL.
-        self.epg_source_url = "https://iptv-org.github.io/epg/guides/us.xml"
+        self.epg_source_url = self.config.get("channels", {}).get(
+            "epg_source_url", "https://iptv-org.github.io/epg/guides/us.xml"
+        )
         self.epg_data = {'source': self.epg_source_url, 'programs': {}, 'channels': {}}
         
         self.init_ui()
+        self._apply_initial_layout()
         self._load_favorites_from_disk()
         self._load_playlists_from_disk()
         self._load_channels_from_disk()
@@ -2395,7 +2447,7 @@ class WebGridPlayer(QMainWindow):
         self.update_all_player_channel_lists()
         
         # Log performance optimization status for 8-video setup
-        self.logger.info(f"WebGridPlayer initialized for {self.grid_size[0]}x{self.grid_size[1]} grid with performance optimizations")
+        self.logger.info(f"AD-HDTV initialized for {self.grid_size[0]}x{self.grid_size[1]} grid with performance optimizations")
         if self.grid_size[0] * self.grid_size[1] >= 8:
             self.logger.info("8+ video optimization mode enabled: reduced caching, hardware acceleration, multi-threading")
         
@@ -2481,8 +2533,9 @@ class WebGridPlayer(QMainWindow):
     
     def init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("WebGridPlayer - Multi-Video Player with Web Stream Extraction")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setWindowTitle(self.window_title)
+        geom = self.window_geometry
+        self.setGeometry(geom["x"], geom["y"], geom["width"], geom["height"])
         
         # Load and set application icon
         self._set_application_icon()
@@ -2614,6 +2667,34 @@ class WebGridPlayer(QMainWindow):
             sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             sc.activated.connect(lambda dr=d_row, dc=d_col: self.move_active_selection(dr, dc))
             self._selection_nav_shortcuts.append(sc)
+
+    def _apply_initial_layout(self):
+        if self.display_resolution:
+            self.resize(self.display_resolution[0], self.display_resolution[1])
+        if not self.control_panel_visible:
+            self.control_panel.setVisible(False)
+            self.toggle_button.setText("▲ Show Controls")
+        if self.debug_overlay_enabled:
+            self._init_debug_overlay()
+
+    def _init_debug_overlay(self):
+        self._debug_timer = QTimer(self)
+        self._debug_timer.timeout.connect(self._update_debug_overlay)
+        self._debug_timer.start(1000)
+        self._update_debug_overlay()
+
+    def _update_debug_overlay(self):
+        if not hasattr(self, "status_bar") or not self.status_bar:
+            return
+        rows, cols = self.grid_size
+        active_id = self.active_player.player_id if self.active_player else "None"
+        current_channel = self.current_channel if self.current_channel is not None else "None"
+        profile = getattr(self.app_state, "profile", "default")
+        self.status_bar.showMessage(
+            f"Profile: {profile} | Grid: {rows}x{cols} | Active: {active_id} | Channel: {current_channel}",
+            0,
+        )
+
     def show_context_menu(self, position):
         """Show context menu on right-click."""
         context_menu = QMenu(self)
@@ -2666,10 +2747,10 @@ class WebGridPlayer(QMainWindow):
         try:
             # Try multiple icon locations
             icon_paths = [
-                Path(__file__).parent.parent / 'docs' / 'webgridplayer.svg',
-                Path(__file__).parent.parent / 'webgridplayer.svg',
-                Path.cwd() / 'docs' / 'webgridplayer.svg',
-                Path.cwd() / 'webgridplayer.svg',
+                Path(__file__).parent.parent / 'docs' / 'adhdtv.svg',
+                Path(__file__).parent.parent / 'adhdtv.svg',
+                Path.cwd() / 'docs' / 'adhdtv.svg',
+                Path.cwd() / 'adhdtv.svg',
             ]
             
             for icon_path in icon_paths:
@@ -3130,7 +3211,7 @@ class WebGridPlayer(QMainWindow):
                     try:
                         player.cleanup()  # Light cleanup - preserve VLC instances
                     except Exception as e:
-                        print(f"Error cleaning up player {player.player_id}: {e}")
+                        self.logger.warning("Error cleaning up player %s: %s", player.player_id, e)
             
             # Clear existing grid layout widgets (but reuse the layout instance)
             if hasattr(self, 'grid_layout'):
@@ -3159,8 +3240,7 @@ class WebGridPlayer(QMainWindow):
                             raise Exception("Player creation returned invalid object")
                         player_id += 1
                     except Exception as e:
-                        self.logger.error(f"Error creating player {player_id}: {e}")
-                        print(f"Error creating player {player_id}: {e}")
+                        self.logger.error("Error creating player %s: %s", player_id, e)
                         # Create a more informative error placeholder
                         placeholder = QLabel(f"Player Error #{player_id}\n{str(e)[:50]}...")
                         placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -3229,10 +3309,10 @@ class WebGridPlayer(QMainWindow):
                 self.update_all_player_channel_lists()
             
             self.status_bar.showMessage(f"Grid: {rows}×{cols} ({len(self.players)} screens) - Click to select, right-click to save")
-            print(f"Successfully created grid: {rows}×{cols} with {len(self.players)} players")
+            self.logger.info("Successfully created grid: %sx%s with %s players", rows, cols, len(self.players))
             
         except Exception as e:
-            print(f"Critical error in create_grid: {e}")
+            self.logger.error("Critical error in create_grid: %s", e)
             self.status_bar.showMessage(f"Error creating grid: {e}")
             # Try to recover by creating a minimal 1x1 grid using existing layout
             try:
@@ -3250,7 +3330,7 @@ class WebGridPlayer(QMainWindow):
                 self.grid_layout.setColumnStretch(0, 1)
                 self.status_bar.showMessage("Recovered with 1×1 grid")
             except Exception as recovery_error:
-                print(f"Failed to recover: {recovery_error}")
+                self.logger.error("Failed to recover grid: %s", recovery_error)
                 self.status_bar.showMessage("Critical grid error - restart recommended")
 
     def prewarm_channels(self, limit: int = None):
@@ -3260,11 +3340,32 @@ class WebGridPlayer(QMainWindow):
             limit: Maximum channels to prewarm. If None, prewarms ALL channels.
                    Stores token URLs in-memory under `channels[num]['url']` without persisting to disk.
         
-        Parallelizes extraction for faster startup. Reports progress in status bar.
+        Parallelizes extraction for faster startup. Runs in a background thread to
+        avoid blocking UI during startup.
         """
         if not self.channels:
             return
-            
+
+        if threading.current_thread() is threading.main_thread():
+            if self._prewarm_thread and self._prewarm_thread.is_alive():
+                return
+            self._prewarm_thread = threading.Thread(
+                target=self._prewarm_channels_worker,
+                args=(limit,),
+                daemon=True,
+            )
+            self._prewarm_thread.start()
+            return
+
+        self._prewarm_channels_worker(limit)
+
+    def _prewarm_channels_worker(self, limit: int = None):
+        def update_status(message: str):
+            if threading.current_thread() is threading.main_thread() and hasattr(self, "status_bar"):
+                self.status_bar.showMessage(message)
+            else:
+                self.logger.debug(message)
+
         try:
             # If limit is None, prewarm ALL channels; otherwise limit the count
             all_nums = sorted(self.channels.keys())
@@ -3285,7 +3386,7 @@ class WebGridPlayer(QMainWindow):
             if not to_extract:
                 return  # All channels already cached
             
-            self.status_bar.showMessage(f"⏳ Prewarming {len(to_extract)} channel(s)...")
+            update_status(f"⏳ Prewarming {len(to_extract)} channel(s)...")
             self.logger.info(f"Starting prewarm for channels: {to_extract}")
             
             # Submit all extraction tasks in parallel
@@ -3328,13 +3429,13 @@ class WebGridPlayer(QMainWindow):
                             finally:
                                 completed += 1
                                 progress = f"{completed}/{len(to_extract)}"
-                                self.status_bar.showMessage(f"⏳ Prewarming channels: {progress}")
+                                update_status(f"⏳ Prewarming channels: {progress}")
                             break
             except FutureTimeoutError:
                 self.logger.warning(f"Prewarm total timeout - completed {completed}/{len(to_extract)}")
             
             if completed > 0:
-                self.status_bar.showMessage(f"✓ Prewarmed {completed}/{len(to_extract)} channels for fast switching")
+                update_status(f"✓ Prewarmed {completed}/{len(to_extract)} channels for fast switching")
                 self.logger.info(f"Prewarm completed: {completed}/{len(to_extract)} channels cached")
             
         except Exception as e:
@@ -3601,7 +3702,7 @@ class WebGridPlayer(QMainWindow):
                     self.favorites = [fav for fav in data if isinstance(fav, dict) and 'url' in fav]
                 self.status_bar.showMessage(f"Loaded {len(self.favorites)} favorites")
         except Exception as e:
-            print(f"Failed to load favorites: {e}")
+            self.logger.error("Failed to load favorites: %s", e)
 
     def _save_favorites_to_disk(self):
         """Persist favorites to JSON."""
@@ -3610,7 +3711,7 @@ class WebGridPlayer(QMainWindow):
                 json.dump(self.favorites, f, indent=2)
             self.status_bar.showMessage(f"Saved {len(self.favorites)} favorites")
         except Exception as e:
-            print(f"Failed to save favorites: {e}")
+            self.logger.error("Failed to save favorites: %s", e)
 
     # ------------------- Playlists -------------------
 
@@ -3711,7 +3812,7 @@ class WebGridPlayer(QMainWindow):
                     self.playlists = data
                     self.status_bar.showMessage(f"Loaded {len(self.playlists)} playlists")
         except Exception as e:
-            print(f"Failed to load playlists: {e}")
+            self.logger.error("Failed to load playlists: %s", e)
 
     def _save_playlists_to_disk(self):
         try:
@@ -3719,7 +3820,7 @@ class WebGridPlayer(QMainWindow):
                 json.dump(self.playlists, f, indent=2)
             self.status_bar.showMessage(f"Saved {len(self.playlists)} playlists")
         except Exception as e:
-            print(f"Failed to save playlists: {e}")
+            self.logger.error("Failed to save playlists: %s", e)
 
     def save_playlist_prompt(self):
         name, ok = QInputDialog.getText(self, 'Save Playlist', 'Enter playlist name:')
@@ -3821,7 +3922,7 @@ class WebGridPlayer(QMainWindow):
                             self.lineup_label.setText(self.channel_lineup_label)
                     self.status_bar.showMessage(f"Loaded {len(self.channels)} channels")
         except Exception as e:
-            print(f"Failed to load channels: {e}")
+            self.logger.error("Failed to load channels: %s", e)
 
     def _save_channels_to_disk(self):
         try:
@@ -3842,7 +3943,7 @@ class WebGridPlayer(QMainWindow):
             # Update all player channel dropdowns
             self.update_all_player_channel_lists()
         except Exception as e:
-            print(f"Failed to save channels: {e}")
+            self.logger.error("Failed to save channels: %s", e)
 
     def update_all_player_channel_lists(self):
         """Update channel dropdown lists in all players."""
@@ -4359,7 +4460,7 @@ class WebGridPlayer(QMainWindow):
         """Refresh tokenized URLs for all channels that have a source_url."""
         numbers = sorted(self.channels.keys())
         idx = 0
-        logger = logging.getLogger('webgridplayer')
+        logger = logging.getLogger(LOGGER_NAME)
         
         def process_next():
             nonlocal idx
@@ -4615,7 +4716,7 @@ class WebGridPlayer(QMainWindow):
                     preview_player.play()
                     preview_player.audio_set_mute(True)  # Mute preview by default
                 except Exception as e:
-                    print(f"Preview error: {e}")
+                    self.logger.error("Preview error: %s", e)
         
         stream_table.currentCellChanged.connect(lambda: on_selection_changed())
         
@@ -4847,8 +4948,8 @@ class WebGridPlayer(QMainWindow):
             title_item = table.item(current_row, 1)
             stream = title_item.data(Qt.ItemDataRole.UserRole)
             
-            print(f"🎯 Double-click: Loading single stream into selected player")
-            print(f"   Stream: {stream['title']}")
+            self.logger.info("Double-click: loading single stream into selected player")
+            self.logger.debug("Stream: %s", stream.get('title'))
 
             # Browser-mode streams must be opened via WebEngine, not VLC
             if (stream.get('type') == 'browser'):
@@ -4860,10 +4961,10 @@ class WebGridPlayer(QMainWindow):
             # Use selected player if available
             if self.active_player:
                 player = self.active_player
-                print(f"   Using selected player {player.player_id}")
+                self.logger.debug("Using selected player %s", player.player_id)
                 # Note: source_url should be passed from show_stream_selection_dialog
                 success = player.load_media(stream['url'], stream['title'], source_url=source_url)
-                print(f"   Result: {'✅ Success' if success else '❌ Failed'}")
+                self.logger.info("Load result: %s", "success" if success else "failed")
                 # Save channel mapping if provided
                 self._maybe_save_channel_mapping(channel_num_text, channel_title_text, stream, source_url)
                 dialog.accept()
@@ -4874,14 +4975,14 @@ class WebGridPlayer(QMainWindow):
             if available_players:
                 player = available_players[0]
                 self.set_active_player(player)  # Auto-select the chosen player
-                print(f"   Using first available player {player.player_id}")
+                self.logger.debug("Using first available player %s", player.player_id)
                 success = player.load_media(stream['url'], stream['title'], source_url=source_url)
-                print(f"   Result: {'✅ Success' if success else '❌ Failed'}")
+                self.logger.info("Load result: %s", "success" if success else "failed")
                 # Save channel mapping if provided
                 self._maybe_save_channel_mapping(channel_num_text, channel_title_text, stream, source_url)
                 dialog.accept()
             else:
-                print("   ❌ No available players")
+                self.logger.warning("No available players")
                 QMessageBox.warning(dialog, "Grid Full", "All grid slots are occupied. Click a player to select it first.")
     
     def add_selected_streams_from_table(self, table: QTableWidget, dialog: QDialog, source_url: str = None, channel_num_text: str = None, channel_title_text: str = None):
@@ -4901,13 +5002,13 @@ class WebGridPlayer(QMainWindow):
             
             if self.active_player:
                 player = self.active_player
-                print(f"🎯 Loading single selected stream into selected player {player.player_id}")
+                self.logger.info("Loading single selected stream into selected player %s", player.player_id)
                 if (stream.get('type') == 'browser'):
                     self.add_url_to_browser_mode(stream.get('url', ''))
                     success = True
                 else:
                     success = player.load_media(stream['url'], stream['title'], source_url=source_url)
-                print(f"   Result: {'✅ Success' if success else '❌ Failed'}")
+                self.logger.info("Load result: %s", "success" if success else "failed")
                 # Save channel mapping if provided
                 self._maybe_save_channel_mapping(channel_num_text, channel_title_text, stream, source_url)
             else:
@@ -4932,13 +5033,17 @@ class WebGridPlayer(QMainWindow):
             
             if self.active_player:
                 player = self.active_player
-                print(f"🎯 Loading first of {len(selected_rows)} streams into selected player {player.player_id}")
+                self.logger.info(
+                    "Loading first of %s streams into selected player %s",
+                    len(selected_rows),
+                    player.player_id,
+                )
                 if (stream.get('type') == 'browser'):
                     self.add_url_to_browser_mode(stream.get('url', ''))
                     success = True
                 else:
                     success = player.load_media(stream['url'], stream['title'], source_url=source_url)
-                print(f"   Result: {'✅ Success' if success else '❌ Failed'}")
+                self.logger.info("Load result: %s", "success" if success else "failed")
                 # Save channel mapping if provided
                 self._maybe_save_channel_mapping(channel_num_text, channel_title_text, stream, source_url)
             else:
@@ -5289,7 +5394,7 @@ class WebGridPlayer(QMainWindow):
         
         player_id = getattr(target_player, 'display_id', getattr(target_player, 'player_id', 'unknown'))
         self.status_bar.showMessage(f"Loaded in browser mode on Player #{player_id}: {url}")
-        print(f"🌐 Added to browser mode on Player #{player_id}: {url}")
+        self.logger.info("Added to browser mode on Player %s: %s", player_id, url)
     
     def save_state(self):
         """Save current grid state to file."""
@@ -5420,17 +5525,17 @@ class WebGridPlayer(QMainWindow):
                 # Check if stream needs refresh (refresh every 25 minutes for 30min tokens)
                 last_refresh = self.active_streams[url]['last_refresh']
                 if current_time - last_refresh > 1500:  # 25 minutes
-                    print(f"🔄 Refreshing time-sensitive stream: {url}")
+                    self.logger.info("Refreshing time-sensitive stream: %s", url)
                     self.refresh_stream_token(player, url)
     
     def refresh_stream_token(self, player, old_url):
         """Refresh a stream with expiring token."""
         source_page = self.active_streams.get(old_url, {}).get('original_page')
         if not source_page:
-            print("⚠️  No source page available for token refresh")
+            self.logger.warning("No source page available for token refresh")
             return
             
-        print(f"🔄 Extracting fresh streams from: {source_page}")
+        self.logger.info("Extracting fresh streams from: %s", source_page)
         
         def refresh_worker():
             try:
@@ -5450,10 +5555,10 @@ class WebGridPlayer(QMainWindow):
                     # Update on main thread
                     QTimer.singleShot(0, lambda: self.apply_stream_refresh(player, new_stream, source_page))
                 else:
-                    print("⚠️  No fresh stream found for refresh")
+                    self.logger.warning("No fresh stream found for refresh")
                     
             except Exception as e:
-                print(f"❌ Error refreshing stream: {e}")
+                self.logger.error("Error refreshing stream: %s", e)
         
         # Run in background
         self.thread_pool.submit(refresh_worker)
@@ -5465,7 +5570,7 @@ class WebGridPlayer(QMainWindow):
         old_url = player.current_url
         new_url = new_stream['url']
         
-        print(f"✅ Applying refreshed stream: {new_stream['title']}")
+        self.logger.info("Applying refreshed stream: %s", new_stream.get('title'))
         
         # Load new stream
         if player.load_media(new_url, new_stream['title']):
@@ -5482,7 +5587,7 @@ class WebGridPlayer(QMainWindow):
             # Store source page reference in player
             player.source_page = source_page
             
-            print(f"🎉 Stream refresh successful")
+            self.logger.info("Stream refresh successful")
     
     def _refresh_idle_channels(self):
         """Refresh cached tokens for idle channels while app is idle (background task).
@@ -5561,11 +5666,20 @@ class WebGridPlayer(QMainWindow):
         event.accept()
 
 
-def main():
+# Backward-compatible name for legacy entrypoints/imports.
+WebGridPlayer = ADHDTVPlayer
+
+
+def main(app_state: Optional[Any] = None, config: Optional[Dict[str, Any]] = None):
     """Main entry point."""
+    config = config or {}
+    app_name = config.get("app_name", APP_NAME)
+    app_version = config.get("version", "0.0.0")
+    setup_logging(app_name=app_name, log_level=config.get("logging", {}).get("level", "INFO"))
+
     app = QApplication(sys.argv)
-    app.setApplicationName("WebGridPlayer")
-    app.setApplicationVersion("1.0.0")
+    app.setApplicationName(app_name)
+    app.setApplicationVersion(app_version)
     
     # Check for VLC
     try:
@@ -5579,8 +5693,13 @@ def main():
         return 1
     
     # Create and show main window
-    window = WebGridPlayer()
-    window.show()
+    window = WebGridPlayer(app_state=app_state, config=config)
+    if window.display_mode == "fullscreen":
+        window.showFullScreen()
+    elif window.display_mode == "maximized":
+        window.showMaximized()
+    else:
+        window.show()
     
     return app.exec()
 

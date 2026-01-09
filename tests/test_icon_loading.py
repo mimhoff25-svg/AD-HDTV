@@ -23,10 +23,10 @@ try:
     
     # Check if SVG icon file exists
     icon_paths = [
-        Path(__file__).parent.parent / 'docs' / 'webgridplayer.svg',
-        Path(__file__).parent.parent / 'webgridplayer.svg',
-        Path.cwd() / 'docs' / 'webgridplayer.svg',
-        Path.cwd() / 'webgridplayer.svg',
+        Path(__file__).parent.parent / 'docs' / 'adhdtv.svg',
+        Path(__file__).parent.parent / 'adhdtv.svg',
+        Path.cwd() / 'docs' / 'adhdtv.svg',
+        Path.cwd() / 'adhdtv.svg',
     ]
     
     print("\nSearching for icon files:")

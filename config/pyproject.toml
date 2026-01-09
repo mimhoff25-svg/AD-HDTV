@@ -3,16 +3,16 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "webgridplayer"
+name = "adhdtv"
 version = "1.0.0"
 description = "VLC-based multi-video player with intelligent web stream extraction"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "WebGridPlayer Contributors", email = "contributors@webgridplayer.org"}
+    {name = "ADHDTV Contributors", email = "contributors@adhdtv.org"}
 ]
 maintainers = [
-    {name = "WebGridPlayer Team", email = "maintainers@webgridplayer.org"}
+    {name = "ADHDTV Team", email = "maintainers@adhdtv.org"}
 ]
 keywords = ["video", "player", "vlc", "streaming", "multi-video", "grid", "web-extraction"]
 classifiers = [
@@ -52,17 +52,17 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/webgridplayer"
-Documentation = "https://github.com/yourusername/webgridplayer#readme"
-Repository = "https://github.com/yourusername/webgridplayer.git"
-"Bug Tracker" = "https://github.com/yourusername/webgridplayer/issues"
-Changelog = "https://github.com/yourusername/webgridplayer/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/yourusername/adhdtv"
+Documentation = "https://github.com/yourusername/adhdtv#readme"
+Repository = "https://github.com/yourusername/adhdtv.git"
+"Bug Tracker" = "https://github.com/yourusername/adhdtv/issues"
+Changelog = "https://github.com/yourusername/adhdtv/blob/main/CHANGELOG.md"
 
 [project.scripts]
-webgridplayer = "webgridplayer:main"
+adhdtv = "adhdtv:main"
 
 [tool.setuptools]
-py-modules = ["webgridplayer"]
+py-modules = ["adhdtv"]
 
 [tool.black]
 line-length = 88
@@ -104,4 +104,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=webgridplayer --cov-report=html --cov-report=term"
+addopts = "-v --cov=adhdtv --cov-report=html --cov-report=term"

@@ -1,12 +1,12 @@
 # ✅ Application Icon Loading Fixed
 
 ## Problem
-The WebGridPlayer application window was not displaying an icon when launched.
+The AD-HDTV application window was not displaying an icon when launched.
 
 ## Solution Implemented
 
 ### 1. **Icon Loading Method Added**
-Added `_set_application_icon()` method to the WebGridPlayer class that:
+Added `_set_application_icon()` method to the main window class that:
 - Searches for the SVG icon file in multiple locations
 - Loads the icon if found
 - Creates a fallback procedural icon (blue play button) if SVG not found
@@ -14,10 +14,10 @@ Added `_set_application_icon()` method to the WebGridPlayer class that:
 
 ### 2. **Location Search Order**
 The application looks for the icon in this order:
-1. `../docs/webgridplayer.svg` (relative to script)
-2. `../webgridplayer.svg` (relative to script)
-3. `docs/webgridplayer.svg` (current working directory)
-4. `webgridplayer.svg` (current working directory)
+1. `../docs/adhdtv.svg` (relative to script)
+2. `../adhdtv.svg` (relative to script)
+3. `docs/adhdtv.svg` (current working directory)
+4. `adhdtv.svg` (current working directory)
 
 ### 3. **Fallback Icon**
 If no SVG is found, the application automatically generates a procedural icon:
@@ -31,7 +31,7 @@ The icon loading is called during UI initialization:
 ```python
 def init_ui(self):
     """Initialize the user interface."""
-    self.setWindowTitle("WebGridPlayer - Multi-Video Player with Web Stream Extraction")
+    self.setWindowTitle("AD-HDTV - Multi-Video Player with Web Stream Extraction")
     self.setGeometry(100, 100, 1200, 800)
     
     # Load and set application icon
@@ -90,8 +90,8 @@ Result:
 ## Icon Details
 
 ### SVG Icon
-- **Location**: `docs/webgridplayer.svg`
-- **Size**: 1.8 KB
+- **Location**: `docs/adhdtv.svg`
+- **Size**: 1.0 KB
 - **Format**: SVG (scalable)
 - **Status**: ✅ Found and loaded
 

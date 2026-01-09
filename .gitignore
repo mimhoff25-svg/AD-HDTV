@@ -147,3 +147,4 @@ config.ini
 user_settings.json
 cache/
 temp/
+state/

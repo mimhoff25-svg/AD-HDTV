@@ -1,9 +1,18 @@
 # Changelog
 
-All notable changes to WebGridPlayer will be documented in this file.
+All notable changes to AD-HDTV (formerly WebGridPlayer) will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.1.1b1] - 2026-01-09
+
+### Added
+- AD-HDTV app entrypoint (`app.py`) with config/profile bootstrap.
+
+### Changed
+- Project renamed to AD-HDTV (formerly WebGridPlayer).
+- Launch scripts now route through the unified entrypoint.
 
 ## [1.1.0] - 2026-01-05
 

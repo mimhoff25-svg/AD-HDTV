@@ -9,15 +9,17 @@ Tests the three key optimizations:
 4. Idle channel refresh for continuous cache maintenance
 """
 
-import sys
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_PATH = PROJECT_ROOT / "src" / "webgridplayer.py"
 
 # Test the optimizations are in place
 print("\n" + "="*70)
 print("CHANNEL LOADING PERFORMANCE OPTIMIZATIONS - VERIFICATION TEST")
 print("="*70)
 
-with open('/home/mike/projects/webgridplayer/src/webgridplayer.py', 'r') as f:
+with open(SOURCE_PATH, 'r') as f:
     content = f.read()
 
 # Test 1: Prewarm expanded to all channels

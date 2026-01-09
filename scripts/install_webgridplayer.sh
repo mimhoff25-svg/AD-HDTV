@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# WebGridPlayer Installation Script
-# This script installs WebGridPlayer and its dependencies
+# AD-HDTV Installation Script
+# This script installs AD-HDTV and its dependencies
 
 set -e  # Exit on any error
 
-echo "🚀 WebGridPlayer Installation Script"
+echo "🚀 AD-HDTV Installation Script"
 echo "===================================="
-echo "Version: 1.0.0"
-echo "Repository: https://github.com/yourusername/webgridplayer"
+echo "Version: 1.1.1b1"
+echo "Repository: https://github.com/yourusername/adhdtv"
 echo ""
 
 # Check if Python 3 is installed
@@ -125,10 +125,10 @@ if [ $? -eq 0 ]; then
     fi
     
     echo ""
-    echo "To run WebGridPlayer:"
-    echo "1. From application menu: Search for 'WebGridPlayer'"
-    echo "2. From command line: ./run_webgridplayer.sh"
-    echo "3. From virtual environment: source venv/bin/activate && python webgridplayer.py"
+    echo "To run AD-HDTV:"
+    echo "1. From application menu: Search for 'AD-HDTV'"
+    echo "2. From command line: ./run_adhdtv.sh"
+    echo "3. From virtual environment: source venv/bin/activate && python app.py"
     echo ""
 else
     echo "❌ Installation failed. Please check the error messages above."

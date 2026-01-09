@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WebGridPlayer Error Analysis Tool
+AD-HDTV Error Analysis Tool
 
 This script analyzes error logs to identify patterns and provide insights.
 """
@@ -15,7 +15,7 @@ import argparse
 
 
 class ErrorAnalyzer:
-    """Analyze WebGridPlayer error logs."""
+    """Analyze AD-HDTV error logs."""
     
     def __init__(self, logs_dir: str = "logs"):
         self.logs_dir = Path(logs_dir)
@@ -57,7 +57,7 @@ class ErrorAnalyzer:
         cutoff_date = datetime.now() - timedelta(days=days)
         log_files = []
         
-        for pattern in ['webgridplayer_*.log', 'errors_*.log', 'known_errors_*.log']:
+        for pattern in ['ad-hdtv_*.log', 'errors_*.log', 'known_errors_*.log']:
             for log_file in self.logs_dir.glob(pattern):
                 try:
                     # Extract date from filename
@@ -161,7 +161,7 @@ class ErrorAnalyzer:
         
         # Generate report
         report = []
-        report.append(f"# WebGridPlayer Error Analysis Report")
+        report.append(f"# AD-HDTV Error Analysis Report")
         report.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         report.append(f"Period: Last {days} days")
         report.append(f"Log files analyzed: {len(log_files)}")
@@ -246,7 +246,7 @@ class ErrorAnalyzer:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Analyze WebGridPlayer error logs')
+    parser = argparse.ArgumentParser(description='Analyze AD-HDTV error logs')
     parser.add_argument('--days', type=int, default=7, help='Number of days to analyze (default: 7)')
     parser.add_argument('--logs-dir', default='logs', help='Directory containing log files (default: logs)')
     parser.add_argument('--format', choices=['text', 'json'], default='text', help='Output format (default: text)')

@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# WebGridPlayer with Virtual Display
-# Runs WebGridPlayer using Xvfb (virtual framebuffer)
+# AD-HDTV with Virtual Display
+# Runs AD-HDTV using Xvfb (virtual framebuffer)
 
-echo "🖥️  Starting WebGridPlayer with Virtual Display"
+echo "🖥️  Starting AD-HDTV with Virtual Display"
 echo "==============================================="
 
 # Check if Xvfb is installed
@@ -41,11 +41,15 @@ export DBUS_SYSTEM_BUS_ADDRESS="unix:path=/var/run/dbus/system_bus_socket"
 sleep 2
 
 echo "✅ Virtual display ready on :99"
-echo "🎬 Launching WebGridPlayer..."
+echo "🎬 Launching AD-HDTV..."
 echo ""
 
-# Run WebGridPlayer
-python "$PROJECT_ROOT/src/webgridplayer.py" "$@"
+# Run AD-HDTV
+if [ -f "$PROJECT_ROOT/app.py" ]; then
+    python "$PROJECT_ROOT/app.py" "$@"
+else
+    python "$PROJECT_ROOT/src/webgridplayer.py" "$@"
+fi
 
 # Cleanup
 echo ""

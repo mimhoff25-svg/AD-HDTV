@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AD-HDTV
+Comment=Multi-video grid player (formerly WebGridPlayer)
+Exec=/home/mike/projects/AD_HDTV/run_adhdtv.sh
+Icon=/home/mike/projects/AD_HDTV/adhdtv.svg
+Terminal=false
+Categories=AudioVideo;Player;TV;
+StartupWMClass=ADHDTV

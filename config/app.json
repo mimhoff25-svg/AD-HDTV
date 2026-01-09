@@ -1,0 +1,17 @@
+{
+  "app_name": "AD-HDTV",
+  "version": "1.1.1b1",
+  "window_title": "AD-HDTV - Multi-Video Player",
+  "window_geometry": {"x": 100, "y": 100, "width": 1200, "height": 800},
+  "default_grid": [1, 1],
+  "default_volume": 70,
+  "control_panel_visible": true,
+  "tick_rate_hz": 60,
+  "display": {"mode": "windowed", "resolution": [1200, 800]},
+  "logging": {"level": "INFO"},
+  "channels": {
+    "epg_source_url": "https://iptv-org.github.io/epg/guides/us.xml",
+    "lineup_label": ""
+  },
+  "debug_overlay": false
+}

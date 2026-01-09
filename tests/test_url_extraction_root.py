@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Test stream extraction from a URL."""
-import sys
+import os, sys
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+SRC = os.path.join(ROOT, 'src')
+for p in (ROOT, SRC):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
 from webgridplayer import VideoStreamExtractor
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python test_stream_extraction.py <URL>")
+        print("Usage: python test_url_extraction_root.py <URL>")
         print("\nExample URLs to test:")
         print("  https://www.youtube.com/watch?v=...")
         print("  https://www.twitch.tv/...")

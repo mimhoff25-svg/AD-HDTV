@@ -1,4 +1,4 @@
-# WebGridPlayer Requirements
+# AD-HDTV Requirements
 # Core GUI framework (choose one)
 PyQt6>=6.0.0
 # PyQt5>=5.15.0  # Alternative if PyQt6 is not available

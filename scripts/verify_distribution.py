@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WebGridPlayer Distribution Verification
+AD-HDTV Distribution Verification
 Checks that all files are present and ready for distribution
 """
 
@@ -10,27 +10,28 @@ from pathlib import Path
 
 def check_distribution():
     """Verify the distribution is complete and ready."""
-    print("🔍 WebGridPlayer Distribution Check")
+    print("🔍 AD-HDTV Distribution Check")
     print("=" * 40)
     
     # Required files for distribution
     required_files = [
+        'app.py',
         'webgridplayer.py',
-        'README.md', 
+        'README.md',
         'LICENSE',
         'requirements.txt',
         'pyproject.toml',
-        'install_webgridplayer.sh',
-        'run_webgridplayer.sh',
+        'install_adhdtv.sh',
+        'run_adhdtv.sh',
         'install_desktop.sh',
         'WebGridPlayer.desktop',
-        'webgridplayer.svg',
+        'adhdtv.svg',
         '.gitignore',
         'CHANGELOG.md',
         'CONTRIBUTING.md',
         'QUICK_START.md',
         'examples.py',
-        'test_stream_extraction.py'
+        'tests/test_stream_extraction.py'
     ]
     
     missing_files = []
@@ -55,7 +56,7 @@ def check_distribution():
     
     # Check file permissions
     print("\nExecutable files:")
-    executable_files = ['install_webgridplayer.sh', 'run_webgridplayer.sh', 'install_desktop.sh']
+    executable_files = ['install_adhdtv.sh', 'run_adhdtv.sh', 'install_desktop.sh']
     for file in executable_files:
         if Path(file).exists():
             if os.access(file, os.X_OK):
@@ -65,7 +66,7 @@ def check_distribution():
     
     # Check Python syntax
     print("\nPython syntax check:")
-    python_files = ['webgridplayer.py', 'examples.py', 'test_stream_extraction.py']
+    python_files = ['app.py', 'webgridplayer.py', 'examples.py', 'tests/test_stream_extraction.py']
     for file in python_files:
         try:
             with open(file, 'r') as f:

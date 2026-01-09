@@ -1,30 +1,30 @@
 [Desktop Entry]
-Version=1.0
+Version=1.1
 Type=Application
-Name=WebGridPlayer
+Name=AD-HDTV
 GenericName=Multi-Video Player
-Comment=VLC-based multi-video player with web stream extraction
-Icon=/home/mike/projects/webgridplayer/docs/webgridplayer.svg
-Exec=bash /home/mike/projects/webgridplayer/scripts/run_webgridplayer.sh
-Path=/home/mike/projects/webgridplayer
+Comment=AD-HDTV (formerly WebGridPlayer) - VLC-based multi-video player with web stream extraction
+Icon=/home/mike/projects/AD_HDTV/docs/adhdtv.svg
+Exec=bash /home/mike/projects/AD_HDTV/scripts/run_adhdtv.sh
+Path=/home/mike/projects/AD_HDTV
 Terminal=false
 StartupNotify=true
 MimeType=video/mp4;video/avi;video/mkv;video/mov;video/flv;video/wmv;video/webm;video/m4v;video/3gp;video/ogg;application/x-mpegurl;
 Categories=AudioVideo;Player;Video;
 Keywords=video;player;streaming;grid;multi-video;vlc;webcam;
-StartupWMClass=WebGridPlayer
+StartupWMClass=AD-HDTV
 Actions=OpenURL;FetchWeb;
 
 [Desktop Action OpenURL]
 Name=Add Streaming URL
-Exec=bash /home/mike/projects/webgridplayer/scripts/run_webgridplayer.sh --add-url
+Exec=bash /home/mike/projects/AD_HDTV/scripts/run_adhdtv.sh --add-url
 
 [Desktop Action FetchWeb]
 Name=Fetch Web Stream
-Exec=bash /home/mike/projects/webgridplayer/scripts/run_webgridplayer.sh --fetch-web
-Icon=webgridplayer
+Exec=bash /home/mike/projects/AD_HDTV/scripts/run_adhdtv.sh --fetch-web
+Icon=/home/mike/projects/AD_HDTV/docs/adhdtv.svg
 
 [Desktop Action FetchWeb]
 Name=Fetch from Web Page
-Exec=/home/mike/projects/webgridplayer/run_webgridplayer.sh --fetch-web
-Icon=webgridplayer
+Exec=/home/mike/projects/AD_HDTV/run_webgridplayer.sh --fetch-web
+Icon=/home/mike/projects/AD_HDTV/docs/adhdtv.svg

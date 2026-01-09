@@ -6,16 +6,17 @@ Test script to validate the three recent fixes:
 3. Dropdown on grid resize - channel list visible after 2x4 resize
 """
 
-import sys
-import json
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_PATH = PROJECT_ROOT / "src" / "webgridplayer.py"
 
 # Test 1: Check that toggle_solo() handles hiding/showing players
 print("\n" + "="*60)
 print("TEST 1: Solo Mode Scaling Implementation")
 print("="*60)
 
-with open('/home/mike/projects/webgridplayer/src/webgridplayer.py', 'r') as f:
+with open(SOURCE_PATH, 'r') as f:
     content = f.read()
     
     # Check that handle_solo_activated hides players

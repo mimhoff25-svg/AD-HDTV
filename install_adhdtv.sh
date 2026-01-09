@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Compatibility wrapper for the canonical installer in scripts/.
+# AD-HDTV installer alias.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

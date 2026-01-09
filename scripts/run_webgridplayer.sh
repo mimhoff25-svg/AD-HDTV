@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# WebGridPlayer Run Script
+# AD-HDTV Run Script
 # Activates the virtual environment and launches the application
 
 set -e
@@ -91,11 +91,14 @@ PY
     exit 0
 fi
 
-# Check if webgridplayer.py exists
-if [ ! -f "$PROJECT_ROOT/src/webgridplayer.py" ]; then
-    echo "❌ src/webgridplayer.py not found in current directory."
+# Prefer the unified app entrypoint.
+if [ -f "$PROJECT_ROOT/app.py" ]; then
+    echo "🚀 Starting AD-HDTV..."
+    python "$PROJECT_ROOT/app.py"
+elif [ -f "$PROJECT_ROOT/src/webgridplayer.py" ]; then
+    echo "🚀 Starting AD-HDTV (legacy entrypoint)..."
+    python "$PROJECT_ROOT/src/webgridplayer.py"
+else
+    echo "❌ app.py not found in project root."
     exit 1
 fi
-
-echo "🚀 Starting WebGridPlayer..."
-python "$PROJECT_ROOT/src/webgridplayer.py"

@@ -1,19 +1,19 @@
-# WebGridPlayer Quick Start Guide 🚀
+# AD-HDTV Quick Start Guide 🚀
 
 ## 30-Second Setup
 
 ```bash
 # 1. Download and run the installer
-curl -sSL https://raw.githubusercontent.com/yourusername/webgridplayer/main/install_webgridplayer.sh | bash
+curl -sSL https://raw.githubusercontent.com/yourusername/adhdtv/main/install_adhdtv.sh | bash
 
-# 2. Start WebGridPlayer
-./run_webgridplayer.sh
+# 2. Start AD-HDTV
+./run_adhdtv.sh
 ```
 
 ## 2-Minute Demo
 
 ### Try the KIII Tower Cam Example:
-1. **Launch WebGridPlayer**: `python webgridplayer.py`
+1. **Launch AD-HDTV**: `python app.py`
 2. **Fetch Web Stream**: `Web → Fetch from Web Page...`
 3. **Enter URL**: `https://www.kiiitv.com/tower-cam`
 4. **Select Stream**: Choose from extracted streams
@@ -55,7 +55,7 @@ curl -sSL https://raw.githubusercontent.com/yourusername/webgridplayer/main/inst
 
 - **Examples**: Run `python examples.py`
 - **Test**: Run `python test_stream_extraction.py`  
-- **Issues**: https://github.com/yourusername/webgridplayer/issues
+- **Issues**: https://github.com/yourusername/adhdtv/issues
 
 ---
-**Ready to explore multi-video streaming? Launch WebGridPlayer and start creating your perfect grid setup!** 🎬
+**Ready to explore multi-video streaming? Launch AD-HDTV and start creating your perfect grid setup!** 🎬

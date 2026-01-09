@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WebGridPlayer Diagnostics
+AD-HDTV Diagnostics
 Checks for common issues preventing the application from starting
 """
 
@@ -9,7 +9,7 @@ import os
 
 def check_environment():
     """Check the runtime environment."""
-    print("🔍 WebGridPlayer Diagnostics")
+    print("🔍 AD-HDTV Diagnostics")
     print("=" * 50)
     
     # Check Python version
@@ -21,7 +21,7 @@ def check_environment():
         print(f"✅ DISPLAY: {display}")
     else:
         print("❌ DISPLAY: Not set (no X11 display available)")
-        print("   → WebGridPlayer requires a graphical display")
+        print("   → AD-HDTV requires a graphical display")
         print("   → Run on a desktop system or use X11 forwarding")
     
     # Check if running in SSH
@@ -96,34 +96,34 @@ def check_environment():
         print(f"❌ Qt Application: Failed to initialize: {e}")
         return False
     
-    print("\n🎉 All checks passed! WebGridPlayer should work.")
+    print("\n🎉 All checks passed! AD-HDTV should work.")
     return True
 
 def suggest_solutions():
     """Suggest solutions based on environment."""
     print("\n" + "=" * 50)
-    print("💡 Solutions for Running WebGridPlayer:")
+    print("💡 Solutions for Running AD-HDTV:")
     print("=" * 50)
     
     if not os.environ.get('DISPLAY'):
         print("\n📌 Running on Server/Headless System:")
         print("   Option 1: Use X11 Forwarding")
         print("   $ ssh -X user@host")
-        print("   $ cd /home/mike/projects/webgridplayer")
-        print("   $ ./run_webgridplayer.sh")
+        print("   $ cd /home/mike/projects/AD_HDTV")
+        print("   $ ./run_adhdtv.sh")
         print()
         print("   Option 2: Use VNC")
         print("   $ sudo apt install tigervnc-standalone-server")
         print("   $ vncserver :1")
-        print("   $ DISPLAY=:1 ./run_webgridplayer.sh")
+        print("   $ DISPLAY=:1 ./run_adhdtv.sh")
         print()
         print("   Option 3: Use Xvfb (Virtual Display)")
         print("   $ sudo apt install xvfb")
         print("   $ Xvfb :99 -screen 0 1920x1080x24 &")
-        print("   $ DISPLAY=:99 ./run_webgridplayer.sh")
+        print("   $ DISPLAY=:99 ./run_adhdtv.sh")
     else:
         print("\n📌 Display is available - try running:")
-        print("   $ ./run_webgridplayer.sh")
+        print("   $ ./run_adhdtv.sh")
         print()
         print("   If it still fails, check for:")
         print("   - Window manager running")

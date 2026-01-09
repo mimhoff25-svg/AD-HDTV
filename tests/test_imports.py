@@ -43,13 +43,13 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    print("\n4. Testing webgridplayer module imports...")
-    from webgridplayer import VideoPlayer, VideoStreamExtractor, WebGridPlayer
+    print("\n4. Testing adhdtv module imports...")
+    from adhdtv import VideoPlayer, VideoStreamExtractor, ADHDTVPlayer
     print("   ✅ VideoPlayer imported")
     print("   ✅ VideoStreamExtractor imported")
-    print("   ✅ WebGridPlayer imported")
+    print("   ✅ ADHDTVPlayer imported")
 except ImportError as e:
-    print(f"   ❌ Webgridplayer import failed: {e}")
+    print(f"   ❌ ADHDTV import failed: {e}")
     sys.exit(1)
 
 print("\n" + "=" * 60)

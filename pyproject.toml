@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "webgridplayer"
-version = "1.0.0"
-description = "VLC-based multi-video player with intelligent web stream extraction"
+name = "adhdtv"
+version = "1.1.1b1"
+description = "AD-HDTV (formerly WebGridPlayer) - VLC-based multi-video player with intelligent web stream extraction"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -16,7 +16,7 @@ maintainers = [
 ]
 keywords = ["video", "player", "vlc", "streaming", "multi-video", "grid", "web-extraction"]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: End Users/Desktop",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
@@ -52,16 +52,18 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/webgridplayer"
-Documentation = "https://github.com/yourusername/webgridplayer#readme"
-Repository = "https://github.com/yourusername/webgridplayer.git"
-"Bug Tracker" = "https://github.com/yourusername/webgridplayer/issues"
-Changelog = "https://github.com/yourusername/webgridplayer/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/yourusername/adhdtv"
+Documentation = "https://github.com/yourusername/adhdtv#readme"
+Repository = "https://github.com/yourusername/adhdtv.git"
+"Bug Tracker" = "https://github.com/yourusername/adhdtv/issues"
+Changelog = "https://github.com/yourusername/adhdtv/blob/main/CHANGELOG.md"
 
 [project.scripts]
+adhdtv = "webgridplayer:main"
 webgridplayer = "webgridplayer:main"
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 py-modules = ["webgridplayer"]
 
 [tool.black]
