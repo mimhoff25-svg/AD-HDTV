@@ -212,15 +212,6 @@ brew install vlc
 - For streams with expiring tokens (`.m3u8?…`), a periodic background refresh re-extracts from the source page and updates the URL when tokens change.
 - Works alongside auto-recovery if a stream dies unexpectedly.
 
-### TV Guide (EPG) Integration (Planned)
-- Add lineup-specific EPG fetching (e.g., “Spectrum Corpus Christi”).
-- Cache guide data to `state/epg.json` for offline viewing.
-- UI: Guide menu with a channel list and timeline view; click-to-tune.
-- Optional call signs: display `Ch 3 • KIII — NBC` in labels.
-- Provider TBD; integrate via async fetch + robust caching.
-
-If you want this prioritized, open Guide → Open TV Guide to see the scaffold dialog and we can wire in a provider next.
-
 #### PyQt import errors
 ```bash
 # Try PyQt6 first

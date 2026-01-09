@@ -10,7 +10,6 @@
   "display": {"mode": "windowed", "resolution": [1200, 800]},
   "logging": {"level": "INFO"},
   "channels": {
-    "epg_source_url": "https://iptv-org.github.io/epg/guides/us.xml",
     "lineup_label": ""
   },
   "debug_overlay": false

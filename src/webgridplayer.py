@@ -9,17 +9,14 @@ import sys
 import os
 import re
 import json
-import io
 import threading
 import time
 import logging
 import importlib.util
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 from urllib.parse import urljoin, urlparse
-import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 
 APP_NAME = "AD-HDTV"
@@ -900,7 +897,6 @@ class VideoPlayer(QFrame):
         """Handle selection from the URL/channel combo box."""
         if index <= 0:  # Skip the first item (current display)
             return
-        
         # Get channel number from the combo box item data
         channel_num = self.url_combo.itemData(index)
         if channel_num is not None:
@@ -1254,7 +1250,6 @@ class VideoPlayer(QFrame):
         self.current_channel_number = None
         self.set_display_text("Empty")
         self.status_label.setText("⭕")
-        
         main_window = self.get_main_window()
         if main_window:
             main_window.status_bar.showMessage(f"Cleared Player #{self.player_id + 1}")
@@ -2253,83 +2248,6 @@ class VideoPlayer(QFrame):
         """Handle position changed event."""
         pass
 
-    # ------------- EPG helpers (open-source IPTV-Org XMLTV) -------------
-    def _normalize_channel_name(self, name: str) -> str:
-        return re.sub(r'[^a-z0-9]+', '', (name or '').lower())
-
-    def _format_xmltv_time(self, value: str) -> str:
-        try:
-            main = (value or '').split(" ")[0]
-            dt = datetime.strptime(main[:14], "%Y%m%d%H%M%S")
-            return dt.strftime("%Y-%m-%d %H:%M")
-        except Exception:
-            return (value or '')[:15]
-
-    def _parse_epg_xml(self, xml_bytes: bytes, limit_per_channel: int = 50):
-        """Parse XMLTV into {normalized_name: [programs]} and channel id->name map."""
-        programs_by_norm = defaultdict(list)
-        channel_names: Dict[str, str] = {}
-        current_channel_id = None
-        current_prog = None
-        try:
-            context = ET.iterparse(io.BytesIO(xml_bytes), events=("start", "end"))
-        except Exception as e:
-            self.logger.error(f"EPG parse error (init): {e}")
-            return {}, {}
-
-        for event, elem in context:
-            tag = elem.tag.lower()
-            if event == "start":
-                if tag == "channel":
-                    current_channel_id = elem.attrib.get("id") or ""
-                elif tag == "programme":
-                    current_prog = {
-                        'channel_id': elem.attrib.get('channel', ''),
-                        'start': elem.attrib.get('start', ''),
-                        'stop': elem.attrib.get('stop', '')
-                    }
-            elif event == "end":
-                if tag == "display-name" and current_channel_id and current_channel_id not in channel_names:
-                    if elem.text:
-                        channel_names[current_channel_id] = elem.text.strip()
-                elif tag == "programme" and current_prog is not None:
-                    title_text = ""
-                    for child in elem:
-                        if child.tag.lower() == "title" and child.text:
-                            title_text = child.text.strip()
-                            break
-                    name = channel_names.get(current_prog.get('channel_id')) or current_prog.get('channel_id')
-                    if name and title_text:
-                        norm = self._normalize_channel_name(name)
-                        if norm:
-                            programs_by_norm[norm].append({
-                                'title': title_text,
-                                'start': self._format_xmltv_time(current_prog.get('start')),
-                                'end': self._format_xmltv_time(current_prog.get('stop'))
-                            })
-                    current_prog = None
-                elif tag == "channel":
-                    current_channel_id = None
-                elem.clear()
-
-        # Trim per channel for UI friendliness
-        trimmed = {k: v[:limit_per_channel] for k, v in programs_by_norm.items()}
-        return trimmed, channel_names
-
-    def _get_epg_for_channel_title(self, title: str) -> List[Dict[str, str]]:
-        if not getattr(self, 'epg_data', None):
-            return []
-        programs = self.epg_data.get('programs') or {}
-        norm = self._normalize_channel_name(title)
-        if norm in programs:
-            return programs[norm]
-        # fuzzy contains match
-        for key, items in programs.items():
-            if norm and norm in key:
-                return items
-        return []
-
-
 class ADHDTVPlayer(QMainWindow):
     """Main application window."""
     
@@ -2426,12 +2344,6 @@ class ADHDTVPlayer(QMainWindow):
         self.idle_refresh_timer.start(120000)  # Every 2 minutes, only when idle
         self._last_channel_tune_time = 0
 
-        # EPG source (open-source, free). Default to IPTV-Org US guide; can be swapped to any iptv-org guide URL.
-        self.epg_source_url = self.config.get("channels", {}).get(
-            "epg_source_url", "https://iptv-org.github.io/epg/guides/us.xml"
-        )
-        self.epg_data = {'source': self.epg_source_url, 'programs': {}, 'channels': {}}
-        
         self.init_ui()
         self._apply_initial_layout()
         self._load_favorites_from_disk()
@@ -2924,17 +2836,6 @@ class ADHDTVPlayer(QMainWindow):
         restore_audio_action.triggered.connect(self.force_audio_restore_all)
         tools_menu.addAction(restore_audio_action)
 
-        # Guide menu (EPG placeholder)
-        guide_menu = menubar.addMenu('Guide')
-        open_guide_action = QAction('Open TV Guide...', self)
-        open_guide_action.setShortcut('Ctrl+G')
-        open_guide_action.triggered.connect(self.open_tv_guide_dialog)
-        guide_menu.addAction(open_guide_action)
-
-        refresh_guide_action = QAction('Refresh Guide Data', self)
-        refresh_guide_action.triggered.connect(self.refresh_tv_guide_data)
-        guide_menu.addAction(refresh_guide_action)
-    
     def create_control_panel(self):
         """Create the control panel."""
         panel = QFrame()
@@ -3135,12 +3036,6 @@ class ADHDTVPlayer(QMainWindow):
         manage_ch_btn = QPushButton("Manage")
         manage_ch_btn.clicked.connect(self.manage_channels_dialog)
         channel_layout.addWidget(manage_ch_btn)
-
-        guide_btn = QPushButton("Guide")
-        guide_btn.setCheckable(False)
-        guide_btn.setToolTip("Toggle the TV Guide view")
-        guide_btn.clicked.connect(self.open_tv_guide_dialog)
-        channel_layout.addWidget(guide_btn)
 
         self.lineup_label = QLabel("")
         self.lineup_label.setStyleSheet("color: gray;")
@@ -4839,107 +4734,6 @@ class ADHDTVPlayer(QMainWindow):
         
         dialog.exec()
 
-    # ------------------- TV Guide (EPG) scaffolding -------------------
-    def open_tv_guide_dialog(self):
-        """Open the TV Guide view showing all channels with a link to guide data."""
-        dialog = QDialog(self)
-        dialog.setWindowTitle("TV Guide (EPG)")
-        dialog.resize(900, 540)
-
-        main_layout = QHBoxLayout(dialog)
-
-        # Left: channel list with logos
-        left = QVBoxLayout()
-        header_row = QHBoxLayout()
-        lineup_text = getattr(self, 'channel_lineup_label', '') or 'Not set'
-        lineup_label = QLabel(f"Lineup: {lineup_text}")
-        lineup_label.setStyleSheet("color: #4da3ff; font-weight: bold;")
-        header_row.addWidget(lineup_label)
-        header_row.addStretch()
-
-        epg_url = getattr(self, 'epg_source_url', "https://iptv-org.github.io/epg/guides/us.xml")
-        epg_label = QLabel(f"EPG Source: {epg_url}")
-        epg_label.setToolTip(epg_url)
-        header_row.addWidget(epg_label)
-        copy_epg_btn = QPushButton("Copy EPG URL")
-        def copy_epg_url():
-            QGuiApplication.clipboard().setText(epg_url)
-        copy_epg_btn.clicked.connect(copy_epg_url)
-        header_row.addWidget(copy_epg_btn)
-        left.addLayout(header_row)
-
-        channel_list = QListWidget()
-        channel_list.setIconSize(QSize(90, 50))
-        for num in sorted(self.channels.keys()):
-            ch = self.channels[num]
-            label = f"Ch {num}: {ch.get('title', str(num))}"
-            item = QListWidgetItem(label)
-            logo_url = ch.get('logo') or ''
-            if logo_url:
-                pix, _ = _load_logo_pixmap(logo_url, QSize(90, 50))
-                if pix:
-                    item.setIcon(QIcon(pix))
-            item.setData(Qt.ItemDataRole.UserRole, {'num': num, 'channel': ch})
-            channel_list.addItem(item)
-        left.addWidget(channel_list)
-
-        # Right: program list placeholder + local link field
-        right = QVBoxLayout()
-        right.addWidget(QLabel("Programs:"))
-        program_list = QListWidget()
-        program_list.addItem("No guide data configured. Use 'Refresh Guide Data'.")
-        right.addWidget(program_list)
-
-        guide_url_field = QLineEdit()
-        guide_url_field.setPlaceholderText("EPG source URL (copy-only)")
-        guide_url_field.setReadOnly(True)
-        right.addWidget(guide_url_field)
-
-        copy_channel_guide_btn = QPushButton("Copy Guide URL for Channel")
-        right.addWidget(copy_channel_guide_btn)
-
-        main_layout.addLayout(left, 1)
-        main_layout.addLayout(right, 2)
-
-        def on_select():
-            row = channel_list.currentRow()
-            if row < 0:
-                guide_url_field.clear()
-                return
-            program_list.clear()
-            item = channel_list.currentItem()
-            data = item.data(Qt.ItemDataRole.UserRole) or {}
-            ch = data.get('channel', {})
-            title = ch.get('title') or ch.get('name') or str(data.get('num', 'Channel'))
-            guide_entries = self._get_epg_for_channel_title(title)
-            if guide_entries:
-                for entry in guide_entries:
-                    program_list.addItem(f"{entry.get('start','')} - {entry.get('end','')}   {entry.get('title','')}")
-            else:
-                program_list.addItem("No EPG entries loaded for this channel. Run 'Refresh Guide Data'.")
-            guide_url_field.setText(self.epg_data.get('source', self.epg_source_url))
-        channel_list.currentRowChanged.connect(lambda _: on_select())
-
-        def copy_selected_channel_guide():
-            url_text = guide_url_field.text().strip()
-            if url_text:
-                QGuiApplication.clipboard().setText(url_text)
-        copy_channel_guide_btn.clicked.connect(copy_selected_channel_guide)
-
-        dialog.exec()
-
-    def refresh_tv_guide_data(self):
-        """Fetch IPTV-Org XMLTV guide and keep data local."""
-        url = getattr(self, 'epg_source_url', None) or "https://iptv-org.github.io/epg/guides/us.xml"
-        try:
-            resp = requests.get(url, timeout=25)
-            resp.raise_for_status()
-            programs, channel_names = self._parse_epg_xml(resp.content, limit_per_channel=80)
-            self.epg_data = {'source': url, 'programs': programs, 'channels': channel_names}
-            QMessageBox.information(self, "TV Guide", f"Loaded guide for {len(programs)} channels from IPTV-Org EPG.")
-        except Exception as e:
-            QMessageBox.warning(self, "TV Guide", f"Failed to refresh EPG: {e}")
-    
     def add_single_stream_from_table(self, table: QTableWidget, dialog: QDialog, source_url: str = None, channel_num_text: str = None, channel_title_text: str = None):
         """Add a single stream when double-clicked from table.
         Optionally save as a channel if `channel_num_text` is provided."""

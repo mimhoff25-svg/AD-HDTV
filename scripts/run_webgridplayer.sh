@@ -95,10 +95,13 @@ fi
 if [ -f "$PROJECT_ROOT/app.py" ]; then
     echo "🚀 Starting AD-HDTV..."
     python "$PROJECT_ROOT/app.py"
+elif [ -f "$PROJECT_ROOT/src/adhdtv.py" ]; then
+    echo "🚀 Starting AD-HDTV (main entrypoint)..."
+    python "$PROJECT_ROOT/src/adhdtv.py"
 elif [ -f "$PROJECT_ROOT/src/webgridplayer.py" ]; then
     echo "🚀 Starting AD-HDTV (legacy entrypoint)..."
     python "$PROJECT_ROOT/src/webgridplayer.py"
 else
-    echo "❌ app.py not found in project root."
+    echo "❌ No valid entrypoint found in project root."
     exit 1
 fi
