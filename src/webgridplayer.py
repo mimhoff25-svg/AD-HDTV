@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 from urllib.parse import urljoin, urlparse
 from concurrent.futures import ThreadPoolExecutor
+from guide import GuideDialog, LogoResolver, build_sample_data
 
 APP_NAME = "AD-HDTV"
 LOGGER_NAME = "adhdtv"
@@ -777,6 +778,22 @@ class VideoPlayer(QFrame):
         info_layout.setContentsMargins(2, 2, 2, 2)
         info_layout.setSpacing(2)
         
+        # Channel badge (logo + number)
+        self.channel_logo_label = QLabel("Logo")
+        self.channel_logo_label.setFixedSize(70, 40)
+        self.channel_logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.channel_logo_label.setStyleSheet("border: 1px solid #999; background: #e5e5e5; color: #333;")
+        self.channel_logo_label.setScaledContents(False)
+        # Keep logo imagery small while preserving the original badge footprint
+        self.logo_pixmap_size = QSize(45, 26)
+        info_layout.addWidget(self.channel_logo_label)
+
+        self.channel_number_label = QLabel("")
+        self.channel_number_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.channel_number_label.setStyleSheet("color: #5ac8fa; font-weight: bold; font-size: 9pt; padding: 0 2px;")
+        self.channel_number_label.setFixedWidth(60)
+        info_layout.addWidget(self.channel_number_label)
+
         # Combined URL display and channel selector
         self.url_combo = QComboBox()
         self.url_combo.setStyleSheet("""
@@ -923,6 +940,12 @@ class VideoPlayer(QFrame):
                     self.url_combo.addItem(channel_entry, ch_num)
             
             self.url_combo.setCurrentIndex(0)
+            # Refresh badge if tuned
+            if getattr(self, 'current_channel_number', None) is not None:
+                ch_num = self.current_channel_number
+                ch = main_window.channels.get(ch_num) if main_window else None
+                if ch:
+                    self.refresh_channel_badge(ch_num, ch)
     
     def set_display_text(self, text: str):
         """Set the display text in the URL combo box.
@@ -936,9 +959,10 @@ class VideoPlayer(QFrame):
                     ch = main_window.channels.get(num, {})
                     if ch:  # Only override if channel exists
                         ch_title = ch.get('title', str(num))
-                        display = f"Ch {num}: {ch_title}"
+                        display = ch_title
                         self.url_combo.setItemText(0, display)
                         self.url_combo.setCurrentIndex(0)
+                        self.refresh_channel_badge(num, ch)
                         return
             
             # Fallback: show provided text
@@ -981,6 +1005,59 @@ class VideoPlayer(QFrame):
                 }
             """)
 
+    def refresh_channel_badge(self, channel_num: Optional[int], channel_data: Optional[Dict[str, str]] = None):
+        """Update the logo + channel number badge in the player header."""
+        if not hasattr(self, 'channel_logo_label'):
+            return
+        logger = logging.getLogger(LOGGER_NAME)
+        main_window = self.get_main_window()
+        ch = channel_data
+        if not ch and main_window and channel_num is not None:
+            ch = main_window.channels.get(channel_num)
+        if channel_num:
+            self.channel_number_label.setText(f"Ch {channel_num}")
+        else:
+            self.channel_number_label.setText("")
+        pix = None
+        logo_path = None
+        if ch:
+            logo_path = ch.get('logo') or ch.get('logo_path')
+        target_size = getattr(self, 'logo_pixmap_size', self.channel_logo_label.size())
+        if logo_path:
+            try:
+                candidates = []
+                p = Path(logo_path)
+                candidates.append(p)
+                if not p.is_absolute():
+                    candidates.append(Path.cwd() / logo_path)
+                    candidates.append(Path.cwd() / "assets" / "logos" / p.name)
+                for cand in candidates:
+                    if cand.exists():
+                        pixmap = QPixmap(str(cand.resolve()))
+                        if not pixmap.isNull():
+                            pix = pixmap.scaled(
+                                target_size,
+                                Qt.AspectRatioMode.KeepAspectRatio,
+                                Qt.TransformationMode.SmoothTransformation,
+                            )
+                            break
+                if pix is None:
+                    logger.debug("Logo not loaded for channel %s (candidates tried: %s)", channel_num, candidates)
+            except Exception as e:
+                logger.debug("Logo load error for channel %s: %s", channel_num, e)
+                pix = None
+        if not pix:
+            # Fallback text badge using channel title or URL
+            title_text = ""
+            if ch:
+                title_text = ch.get('title') or ch.get('source_url') or str(channel_num or "")
+            if not title_text:
+                title_text = self.current_url or "Channel"
+            pix, _ = _load_logo_pixmap("", target_size)
+            if not pix:
+                pix = _fallback_text_logo(title_text, target_size)
+        self.channel_logo_label.setPixmap(pix)
+
     def show_player_context_menu(self, position):
         """Show right-click context menu for this player."""
         context_menu = QMenu(self)
@@ -991,6 +1068,10 @@ class VideoPlayer(QFrame):
             save_channel_action = QAction(f'📺 Save to Channel...', self)
             save_channel_action.triggered.connect(self.save_to_channel)
             context_menu.addAction(save_channel_action)
+
+            edit_channel_action = QAction('✏️ Edit Channel Profile...', self)
+            edit_channel_action.triggered.connect(self.edit_channel_profile)
+            context_menu.addAction(edit_channel_action)
             
             # Add to Favorites option
             save_fav_action = QAction(f'⭐ Add to Favorites', self)
@@ -1196,13 +1277,232 @@ class VideoPlayer(QFrame):
             
             # Update status
             main_window.status_bar.showMessage(f"Player #{self.player_id + 1} saved as '{channel_name}'")
-            
-            # Show confirmation
-            QMessageBox.information(
-                self, 
-                "Channel Saved", 
-                f"Saved Channel {channel_num}\n\nName: {channel_name}\nSource: {channel_data.get('source_url', '')}"
-            )
+            self.refresh_channel_badge(channel_num, channel_data)
+
+    def edit_channel_profile(self):
+        """Edit or create a channel profile tied to this player."""
+        main_window = self.get_main_window()
+        if not main_window:
+            return
+        # Determine defaults
+        current_num = getattr(self, 'current_channel_number', None)
+        existing = main_window.channels.get(current_num) if current_num else None
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Edit Channel Profile")
+        dlg.resize(700, 540)
+        layout = QVBoxLayout(dlg)
+
+        num_input = QLineEdit(str(current_num or ""))
+        name_input = QLineEdit(existing.get('title', '') if existing else "")
+        url_input = QLineEdit(existing.get('source_url', '') if existing else (self.source_url or self.current_url or ""))
+        logo_input = QLineEdit(existing.get('logo', '') if existing else "")
+        guide_combo = QComboBox()
+        guide_combo.addItem("Unlinked", userData=None)
+        guide_data = getattr(main_window, 'guide_data', None)
+        guide_map = {}
+        if guide_data:
+            for ch in guide_data.channels:
+                label = f"{ch.number}: {ch.name}" if hasattr(ch, 'number') else ch.name
+                guide_combo.addItem(label, userData=ch.id)
+                guide_map[ch.id] = label
+        # Preselect guide link
+        if existing and existing.get('guide_id'):
+            idx = guide_combo.findData(existing.get('guide_id'))
+            if idx >= 0:
+                guide_combo.setCurrentIndex(idx)
+
+        # Logo preview with drag-and-drop
+        class LogoDropLabel(QLabel):
+            def __init__(self, set_preview, save_logo):
+                super().__init__()
+                self._set_preview = set_preview
+                self._save_logo = save_logo
+                self.setAcceptDrops(True)
+
+            def dragEnterEvent(self, event):
+                if event.mimeData().hasUrls() or event.mimeData().hasImage():
+                    event.acceptProposedAction()
+                else:
+                    super().dragEnterEvent(event)
+
+            def dropEvent(self, event):
+                for url in event.mimeData().urls():
+                    local_path = url.toLocalFile()
+                    src = local_path or url.toString()
+                    saved = self._save_logo(src)
+                    if saved:
+                        logo_input.setText(saved)
+                        self._set_preview(saved)
+                    break
+                event.acceptProposedAction()
+
+        def set_preview(path: str):
+            """Load a preview for local or remote logos without crashing on missing files."""
+            logo_preview.setPixmap(QPixmap())
+            logo_preview.setText("Drop logo here")
+            if not path:
+                return
+
+            pix = QPixmap()
+            # Support remote logos (e.g., Imgur links) used by some channels
+            if path.startswith(("http://", "https://")):
+                try:
+                    resp = requests.get(path, timeout=6)
+                    if resp.ok:
+                        pix.loadFromData(resp.content)
+                except Exception:
+                    pix = QPixmap()  # keep as null if fetch fails
+
+            if pix.isNull():
+                p = Path(path)
+                candidates = [p]
+                if not p.is_absolute():
+                    candidates.append(Path.cwd() / p)
+                    candidates.append(Path.cwd() / "assets" / "logos" / p.name)
+                # Do not reference self.status_bar here; this dialog may be constructed before UI init
+                for cand in candidates:
+                    cand = cand.resolve()
+                    if cand.exists():
+                        pix = QPixmap(str(cand))
+                        if not pix.isNull():
+                            break
+
+            if not pix.isNull():
+                logo_preview.setPixmap(pix.scaled(logo_preview.size(), Qt.AspectRatioMode.KeepAspectRatio,
+                                                  Qt.TransformationMode.SmoothTransformation))
+                logo_preview.setText("")
+
+        def save_logo_to_assets(src: str) -> Optional[str]:
+            try:
+                logos_dir = Path("assets") / "logos"
+                logos_dir.mkdir(parents=True, exist_ok=True)
+                ext = Path(src).suffix or ".png"
+                base_name = name_input.text().strip() or f"channel_{num_input.text().strip() or 'logo'}"
+                safe = "".join(ch if ch.isalnum() else "_" for ch in base_name)
+                target = logos_dir / f"{safe}{ext}"
+                if src.startswith("http://") or src.startswith("https://"):
+                    resp = requests.get(src, timeout=10)
+                    resp.raise_for_status()
+                    target.write_bytes(resp.content)
+                else:
+                    target.write_bytes(Path(src).read_bytes())
+                return str(target)
+            except Exception:
+                return None
+
+        logo_preview = LogoDropLabel(set_preview, save_logo_to_assets)
+        logo_preview.setFixedSize(220, 130)
+        logo_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_preview.setStyleSheet("border: 1px solid #555; background: #111; color: #777;")
+        logo_preview.setText("Drop logo here")
+
+        form_rows = [
+            ("Channel Number", num_input),
+            ("Name/Title", name_input),
+            ("Source URL", url_input),
+            ("Logo Path", logo_input),
+            ("Guide Link", guide_combo),
+        ]
+        for label, widget in form_rows:
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label))
+            row.addWidget(widget)
+            if label == "Logo Path":
+                pick_btn = QPushButton("Browse")
+                def pick_logo():
+                    path, _ = QFileDialog.getOpenFileName(self, "Choose Logo", "", "Images (*.png *.jpg *.jpeg)")
+                    if path:
+                        logo_input.setText(path)
+                        set_preview(path)
+                pick_btn.clicked.connect(pick_logo)
+                row.addWidget(pick_btn)
+                pick_local_btn = QPushButton("From logos/")
+                def pick_local():
+                    logos_dir = Path("assets") / "logos"
+                    logos_dir.mkdir(parents=True, exist_ok=True)
+                    files = list(logos_dir.glob("**/*.[pj][pn]g")) + list(logos_dir.glob("**/*.jpeg"))
+                    if not files:
+                        QMessageBox.information(dlg, "No logos", f"No logo files found under {logos_dir}.")
+                        return
+                    chooser = QDialog(dlg)
+                    chooser.setWindowTitle("Pick Logo")
+                    chooser.resize(480, 360)
+                    v = QVBoxLayout(chooser)
+                    lw = QListWidget()
+                    lw.setIconSize(QSize(140, 70))
+                    for f in files:
+                        item = QListWidgetItem(f.name)
+                        pix = QPixmap(str(f))
+                        if not pix.isNull():
+                            item.setIcon(QIcon(pix.scaled(lw.iconSize(), Qt.AspectRatioMode.KeepAspectRatio,
+                                                          Qt.TransformationMode.SmoothTransformation)))
+                        item.setData(Qt.ItemDataRole.UserRole, str(f))
+                        lw.addItem(item)
+                    v.addWidget(lw)
+                    buttons = QHBoxLayout()
+                    okb = QPushButton("Select")
+                    cancelb = QPushButton("Cancel")
+                    buttons.addWidget(okb); buttons.addWidget(cancelb)
+                    v.addLayout(buttons)
+                    picked = {}
+                    def choose():
+                        it = lw.currentItem()
+                        if it:
+                            picked["path"] = it.data(Qt.ItemDataRole.UserRole)
+                        chooser.accept()
+                    okb.clicked.connect(choose)
+                    cancelb.clicked.connect(chooser.reject)
+                    lw.itemDoubleClicked.connect(lambda _: choose())
+                    if chooser.exec() == QDialog.DialogCode.Accepted and picked.get("path"):
+                        logo_input.setText(picked["path"])
+                        set_preview(picked["path"])
+                pick_local_btn.clicked.connect(pick_local)
+                row.addWidget(pick_local_btn)
+            layout.addLayout(row)
+
+        # Add preview below logo controls
+        preview_row = QHBoxLayout()
+        preview_row.addWidget(QLabel("Preview"))
+        preview_row.addWidget(logo_preview)
+        layout.addLayout(preview_row)
+        set_preview(logo_input.text().strip())
+
+        btns = QHBoxLayout()
+        ok_btn = QPushButton("Save")
+        cancel_btn = QPushButton("Cancel")
+        btns.addWidget(ok_btn); btns.addWidget(cancel_btn)
+        layout.addLayout(btns)
+
+        def save():
+            try:
+                num = int(num_input.text().strip())
+            except Exception:
+                QMessageBox.warning(dlg, "Invalid", "Channel number must be a number.")
+                return
+            title = name_input.text().strip() or f"Channel {num}"
+            src = url_input.text().strip() or self.current_url or self.source_url or ""
+            logo_path = logo_input.text().strip()
+            guide_id = guide_combo.currentData()
+            entry = {'title': title}
+            if src:
+                entry['source_url'] = src
+            if logo_path:
+                entry['logo'] = logo_path
+            if guide_id:
+                entry['guide_id'] = guide_id
+            # Remove old number if changed
+            if current_num and current_num != num and current_num in main_window.channels:
+                del main_window.channels[current_num]
+            main_window.channels[num] = entry
+            main_window._save_channels_to_disk()
+            self.current_channel_number = num
+            self.set_display_text(f"Ch {num}: {title}")
+            self.refresh_channel_badge(num, entry)
+            dlg.accept()
+
+        ok_btn.clicked.connect(save)
+        cancel_btn.clicked.connect(dlg.reject)
+        dlg.exec()
     
     def add_to_favorites(self):
         """Add current URL to favorites."""
@@ -1346,7 +1646,6 @@ class VideoPlayer(QFrame):
         main_window = self.get_main_window()
         if not main_window:
             return
-        
         channel = main_window.channels.get(channel_num)
         if not channel:
             QMessageBox.warning(self, "Channel Not Found", f"Channel {channel_num} is not assigned.")
@@ -1356,12 +1655,51 @@ class VideoPlayer(QFrame):
         channel_title = channel.get('title', str(channel_num))
         source_url = channel.get('source_url')
         
+        display_title = channel_title
+        self.current_channel_number = channel_num
+
+        def load_with_url(url_to_use: str):
+            if url_to_use:
+                self.load_media(url_to_use, title=display_title, source_url=source_url)
+                main_window.status_bar.showMessage(f"Loaded channel {channel_num} into Player #{self.display_id}")
+                self.refresh_channel_badge(channel_num, channel)
+
         if channel_url:
-            display_title = f"Ch {channel_num}: {channel_title}"
-            # Track tuned channel number for stable display
-            self.current_channel_number = channel_num
-            self.load_media(channel_url, title=display_title, source_url=source_url)
-            main_window.status_bar.showMessage(f"Loaded channel {channel_num} into Player #{self.display_id}")
+            load_with_url(channel_url)
+        elif source_url:
+            # Extract fresh token/URL in background and then load
+            future = main_window.thread_pool.submit(main_window.extractor.extract_streams, source_url)
+
+            def on_done():
+                if future.done():
+                    try:
+                        streams = future.result()
+                        if streams:
+                            candidate = None
+                            for s in streams:
+                                u = s.get('url', '')
+                                t = s.get('type', '')
+                                if u and (u.lower().endswith('.m3u8') or 'hls' in (t or '').lower() or 'videojs' in (t or '').lower()):
+                                    candidate = s
+                                    break
+                            if not candidate and streams:
+                                candidate = streams[0]
+                            new_url = candidate.get('url') if candidate else None
+                            if new_url:
+                                channel['url'] = new_url  # cache in memory
+                                load_with_url(new_url)
+                            else:
+                                QMessageBox.information(self, "No Streams", f"No streams found for Channel {channel_num}.")
+                        else:
+                            QMessageBox.information(self, "No Streams", f"No streams found for Channel {channel_num}.")
+                    finally:
+                        return
+                else:
+                    QTimer.singleShot(100, on_done)
+
+            QTimer.singleShot(100, on_done)
+        else:
+            QMessageBox.warning(self, "Channel Missing URL", f"Channel {channel_num} has no URL or source page.")
     
     def mousePressEvent(self, event):
         """Notify parent when clicked to set active player."""
@@ -1551,6 +1889,14 @@ class VideoPlayer(QFrame):
             
             # Force UI update
             self.repaint()
+            # Update badge if tuned to a channel
+            if getattr(self, 'current_channel_number', None) is not None:
+                main_window = self.get_main_window()
+                ch = None
+                if main_window:
+                    ch = main_window.channels.get(self.current_channel_number)
+                if ch:
+                    self.refresh_channel_badge(self.current_channel_number, ch)
             
             # Auto-play after a short delay to ensure media is ready (reduced for faster start)
             QTimer.singleShot(200, self.play)
@@ -2164,15 +2510,79 @@ class VideoPlayer(QFrame):
     
     def toggle_fullscreen(self):
         """Toggle fullscreen for browser mode."""
-        if self.browser_mode and self.web_view and WEBENGINE_AVAILABLE:
-            if self.web_view.isFullScreen():
-                self.web_view.showNormal()
+        # Make the player truly fullscreen: cover the desktop, hide overlays
+        main_window = self.get_main_window()
+        if main_window:
+            if main_window.isFullScreen():
+                main_window.showNormal()
                 self.fullscreen_button.setText("⛶")
                 self.fullscreen_button.setToolTip("Enter fullscreen")
+                # Restore overlays
+                self._set_overlay_visibility(True)
             else:
-                self.web_view.showFullScreen()
+                main_window.showFullScreen()
                 self.fullscreen_button.setText("⛏")
                 self.fullscreen_button.setToolTip("Exit fullscreen")
+                # Hide overlays
+                self._set_overlay_visibility(False)
+        else:
+            # Fallback: old behavior
+            if self.browser_mode and self.web_view and WEBENGINE_AVAILABLE:
+                if self.web_view.isFullScreen():
+                    self.web_view.showNormal()
+                    self.fullscreen_button.setText("⛶")
+                    self.fullscreen_button.setToolTip("Enter fullscreen")
+                    self._set_overlay_visibility(True)
+                else:
+                    self.web_view.showFullScreen()
+                    self.fullscreen_button.setText("⛏")
+                    self.fullscreen_button.setToolTip("Exit fullscreen")
+                    self._set_overlay_visibility(False)
+
+    def _set_overlay_visibility(self, visible: bool):
+        # Hide/show overlays: logo, channel name, info panel
+        if hasattr(self, 'channel_logo_label'):
+            self.channel_logo_label.setVisible(visible)
+        if hasattr(self, 'channel_number_label'):
+            self.channel_number_label.setVisible(visible)
+        if hasattr(self, 'url_combo'):
+            self.url_combo.setVisible(visible)
+        if hasattr(self, 'mode_button'):
+            self.mode_button.setVisible(visible)
+        if hasattr(self, 'mute_button'):
+            self.mute_button.setVisible(visible)
+        if hasattr(self, 'refresh_button'):
+            self.refresh_button.setVisible(visible)
+        if hasattr(self, 'status_label'):
+            self.status_label.setVisible(visible)
+        if hasattr(self, 'fullscreen_button'):
+            # Keep fullscreen button visible only when not in fullscreen
+            self.fullscreen_button.setVisible(visible)
+    
+    def toggle_vlc_fullscreen(self):
+        """Toggle VLC's native fullscreen for this player (VLC-style fullscreen)."""
+        if not self.media_player:
+            return
+        try:
+            # libvlc has toggle_fullscreen; fall back to set_fullscreen if missing
+            if hasattr(self.media_player, "toggle_fullscreen"):
+                self.media_player.toggle_fullscreen()
+                current = bool(self.media_player.get_fullscreen())
+            else:
+                current = bool(self.media_player.get_fullscreen())
+                self.media_player.set_fullscreen(not current)
+                current = not current
+            main_window = self.get_main_window()
+            if main_window and hasattr(main_window, "status_bar") and main_window.status_bar:
+                msg = "Exited VLC fullscreen" if not current else "VLC fullscreen (Press Esc to exit)"
+                main_window.status_bar.showMessage(msg)
+        except Exception as e:
+            # If VLC fullscreen fails, fall back to in-app fullscreen for this player
+            logger = logging.getLogger(LOGGER_NAME)
+            logger.debug("VLC fullscreen toggle failed: %s", e)
+            mw = self.get_main_window()
+            if mw and hasattr(mw, "enter_player_fullscreen"):
+                mw.enter_player_fullscreen()
     
     def load_url_in_browser(self, url: str):
         """Load URL in browser mode."""
@@ -2250,7 +2660,21 @@ class VideoPlayer(QFrame):
 
 class ADHDTVPlayer(QMainWindow):
     """Main application window."""
-    
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Force grid and players to expand on show (maximize/fullscreen)
+        if hasattr(self, 'grid_container') and self.centralWidget():
+            self.grid_container.resize(self.centralWidget().size())
+            self.grid_container.updateGeometry()
+            if hasattr(self, 'grid_layout'):
+                self.grid_layout.update()
+            for player in getattr(self, 'players', []):
+                player.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+                player.updateGeometry()
+        self.updateGeometry()
+        self.repaint()
+
     def __init__(self, app_state: Optional[Any] = None, config: Optional[Dict[str, Any]] = None):
         super().__init__()
         self.app_state = app_state
@@ -2305,7 +2729,7 @@ class ADHDTVPlayer(QMainWindow):
         # Performance timer for monitoring 8-video load (will be started after init)
         self.performance_timer = QTimer()
         self.performance_timer.timeout.connect(self._monitor_performance)
-        
+
         self.logger.info("AD-HDTV main window initialized")
         self.action_logger.info("Application window created")
         # Favorites storage
@@ -2321,6 +2745,11 @@ class ADHDTVPlayer(QMainWindow):
         self.channels_file = Path("state/channels.json")
         self.channels_file.parent.mkdir(parents=True, exist_ok=True)
         self.current_channel: Optional[int] = getattr(app_state, "current_channel", None)
+        # Guide assets & data (fixed-size renderer)
+        self.guide_logo_resolver = LogoResolver(Path("assets") / "logos")
+        self.guide_data = build_sample_data(datetime.now())
+        self._guide_fetch_inflight = False
+        QTimer.singleShot(0, lambda: self._load_guide_data_async(force=False, on_done=None))
         self._channel_entry_buffer: str = ""
         self._channel_entry_timer = QTimer()
         self._channel_entry_timer.setSingleShot(True)
@@ -2330,6 +2759,9 @@ class ADHDTVPlayer(QMainWindow):
         self.channel_lineup_label: str = self.config.get("channels", {}).get(
             "lineup_label", ""
         )
+        # Player fullscreen (single video) state
+        self._player_fullscreen_active = False
+        self._player_fullscreen_restore = {}
         
         # Track time-sensitive streams for refresh
         self.active_streams = {}  # {url: {'last_refresh': timestamp, 'original_url': url}}
@@ -2836,6 +3268,13 @@ class ADHDTVPlayer(QMainWindow):
         restore_audio_action.triggered.connect(self.force_audio_restore_all)
         tools_menu.addAction(restore_audio_action)
 
+        # Guide menu (classic TV listings)
+        guide_menu = menubar.addMenu('Guide')
+        open_guide_action = QAction('Open TV Guide...', self)
+        open_guide_action.setShortcut('Ctrl+G')
+        open_guide_action.triggered.connect(self.open_tv_guide_dialog)
+        guide_menu.addAction(open_guide_action)
+
     def create_control_panel(self):
         """Create the control panel."""
         panel = QFrame()
@@ -3008,6 +3447,17 @@ class ADHDTVPlayer(QMainWindow):
         self.solo_mode_active = False
         audio_layout.addWidget(self.solo_mode_button)
         
+        # Fullscreen toggles
+        self.app_fullscreen_button = QPushButton("⛶ App Fullscreen")
+        self.app_fullscreen_button.setToolTip("Toggle fullscreen for the entire app window")
+        self.app_fullscreen_button.clicked.connect(self.toggle_fullscreen_mode)
+        audio_layout.addWidget(self.app_fullscreen_button)
+
+        self.player_fullscreen_button = QPushButton("🖥️ Video Fullscreen")
+        self.player_fullscreen_button.setToolTip("Show the selected video fullscreen on desktop")
+        self.player_fullscreen_button.clicked.connect(self.toggle_player_fullscreen)
+        audio_layout.addWidget(self.player_fullscreen_button)
+        
         layout.addWidget(audio_group)
         
         # Channels (cable-box style)
@@ -3036,6 +3486,12 @@ class ADHDTVPlayer(QMainWindow):
         manage_ch_btn = QPushButton("Manage")
         manage_ch_btn.clicked.connect(self.manage_channels_dialog)
         channel_layout.addWidget(manage_ch_btn)
+
+        guide_btn = QPushButton("Guide")
+        guide_btn.setCheckable(False)
+        guide_btn.setToolTip("Open TV Guide (fixed 1280x720 grid)")
+        guide_btn.clicked.connect(self.open_tv_guide_dialog)
+        channel_layout.addWidget(guide_btn)
 
         self.lineup_label = QLabel("")
         self.lineup_label.setStyleSheet("color: gray;")
@@ -3805,6 +4261,8 @@ class ADHDTVPlayer(QMainWindow):
                                 entry['source_url'] = v.get('source_url', '')
                             if 'logo' in v:
                                 entry['logo'] = v.get('logo', '')
+                            if 'guide_id' in v:
+                                entry['guide_id'] = v.get('guide_id', '')
                             if 'url' in v:
                                 # Keep in-memory only; will not be persisted going forward
                                 entry['url'] = v.get('url', '')
@@ -3829,6 +4287,8 @@ class ADHDTVPlayer(QMainWindow):
                     entry['source_url'] = ch.get('source_url')
                 if 'logo' in ch and ch.get('logo'):
                     entry['logo'] = ch.get('logo')
+                if 'guide_id' in ch and ch.get('guide_id'):
+                    entry['guide_id'] = ch.get('guide_id')
                 payload[str(num)] = entry
             if self.channel_lineup_label:
                 payload['_lineup_label'] = self.channel_lineup_label
@@ -3868,7 +4328,19 @@ class ADHDTVPlayer(QMainWindow):
             fw = None
         if fw is None:
             return False
-        return isinstance(fw, (QLineEdit, QTextEdit, QPlainTextEdit))
+        return isinstance(
+            fw,
+            (
+                QLineEdit,
+                QTextEdit,
+                QPlainTextEdit,
+                QComboBox,
+                QSpinBox,
+                QDoubleSpinBox,
+                QDateTimeEdit,
+                QTimeEdit,
+            ),
+        )
 
     def move_active_selection(self, d_row: int, d_col: int):
         """Move the highlighted/active player by grid delta (rows/cols)."""
@@ -3896,17 +4368,148 @@ class ADHDTVPlayer(QMainWindow):
 
     def keyPressEvent(self, event):
         """Capture numeric keypresses to emulate cable box entry."""
-        key = event.key()
-        if Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
-            digit = key - Qt.Key.Key_0
-            self._channel_entry_buffer += str(digit)
-            self._channel_entry_timer.start()
-            self.status_bar.showMessage(f"Channel entry: {self._channel_entry_buffer}")
+        try:
+            key = event.key()
+            if key == Qt.Key.Key_Escape:
+                # Exit VLC-native fullscreen first if active
+                ap = getattr(self, "active_player", None)
+                if ap and getattr(ap, "media_player", None):
+                    try:
+                        if ap.media_player.get_fullscreen():
+                            ap.toggle_vlc_fullscreen()
+                            return
+                    except Exception:
+                        pass
+                if getattr(self, "_player_fullscreen_active", False):
+                    self.exit_player_fullscreen()
+                    return
+                if self.isFullScreen():
+                    self.toggle_fullscreen_mode()
+                    return
+            if key in (Qt.Key.Key_F, Qt.Key.Key_Enter, Qt.Key.Key_Return) and (event.modifiers() & Qt.KeyboardModifier.AltModifier):
+                # Alt+Enter / Alt+Return and 'F' toggle VLC-style fullscreen on active player
+                ap = getattr(self, "active_player", None)
+                if ap and not getattr(ap, "browser_mode", False) and getattr(ap, "media_player", None):
+                    ap.toggle_vlc_fullscreen()
+                    return
+            if key in (Qt.Key.Key_Plus, Qt.Key.Key_Minus):
+                # Secondary control: Numpad + / - for channel up/down
+                if event.isAutoRepeat():
+                    return
+                if event.modifiers() & Qt.KeyboardModifier.KeypadModifier:
+                    if self._is_text_input_focused():
+                        super().keyPressEvent(event)
+                        return
+                    if key == Qt.Key.Key_Plus:
+                        self.channel_up()
+                    else:
+                        self.channel_down()
+                    return
+            if Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
+                digit = key - Qt.Key.Key_0
+                self._channel_entry_buffer += str(digit)
+                self._channel_entry_timer.start()
+                if hasattr(self, "status_bar") and self.status_bar:
+                    self.status_bar.showMessage(f"Channel entry: {self._channel_entry_buffer}")
+                return
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self._commit_channel_buffer()
+                return
+            super().keyPressEvent(event)
+        except Exception as e:
+            # Avoid crashing the UI on unexpected key handling errors
+            self.logger.exception("Key press handling failed: %s", e)
+            try:
+                super().keyPressEvent(event)
+            except Exception:
+                pass
+
+    def toggle_player_fullscreen(self):
+        """Toggle fullscreen for the currently active player.
+
+        - In VLC mode: use VLC's native fullscreen (like pressing 'f').
+        - In browser mode: expand the player and hide other UI.
+        """
+        player = self.active_player if hasattr(self, "active_player") else None
+        if not player and self.players:
+            player = self.players[0]
+        if not player:
             return
-        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self._commit_channel_buffer()
+
+        # VLC mode: use native fullscreen toggle
+        if not getattr(player, "browser_mode", False) and getattr(player, "media_player", None):
+            player.toggle_vlc_fullscreen()
             return
-        super().keyPressEvent(event)
+
+        # Browser mode fallback: expand the player within the app window
+        if self._player_fullscreen_active:
+            self.exit_player_fullscreen()
+        else:
+            self.enter_player_fullscreen()
+
+    def enter_player_fullscreen(self):
+        player = self.active_player if hasattr(self, "active_player") else None
+        if not player and self.players:
+            player = self.players[0]
+        if not player:
+            return
+
+        self._player_fullscreen_active = True
+        self._player_fullscreen_restore = {
+            "was_fullscreen": self.isFullScreen(),
+            "control_panel_visible": self.control_panel_visible,
+        }
+
+        # Hide control panel for an uncluttered view
+        if hasattr(self, "control_panel"):
+            self.control_panel_visible = False
+        # Hide all overlays for true fullscreen
+        self.set_overlay_visibility(False)
+
+        # Hide other players and let the active one expand
+        for p in self.players:
+            if p is player:
+                p.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+                p.show()
+            else:
+                p.hide()
+
+        self.showFullScreen()
+        self.status_bar.showMessage(f"Fullscreen video: Player #{getattr(player, 'display_id', player.player_id) + 1}")
+
+    def exit_player_fullscreen(self):
+        """Restore grid and controls after fullscreen video."""
+        restore = self._player_fullscreen_restore or {}
+        for p in self.players:
+            p.show()
+            p.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        if hasattr(self, "control_panel"):
+            self.control_panel_visible = restore.get("control_panel_visible", True)
+        # Show overlays again
+        self.set_overlay_visibility(True)
+
+        if not restore.get("was_fullscreen", False):
+            self.showNormal()
+
+        self._player_fullscreen_active = False
+        self._player_fullscreen_restore = {}
+        if hasattr(self, "status_bar") and self.status_bar:
+            self.status_bar.showMessage("Exited video fullscreen")
+
+    def toggle_fullscreen_mode(self):
+        """Toggle fullscreen for the main window."""
+        if self.isFullScreen():
+            self.showNormal()
+            self.set_overlay_visibility(True)
+            self.status_bar.showMessage("Exited fullscreen")
+        else:
+            # If video fullscreen is active, exit it first to avoid conflicting states
+            if self._player_fullscreen_active:
+                self.exit_player_fullscreen()
+            self.showFullScreen()
+            self.set_overlay_visibility(False)
+            self.status_bar.showMessage("Entered fullscreen (Press Esc to exit)")
 
     def tune_channel_from_input(self):
         text = self.channel_input.text().strip() if hasattr(self, 'channel_input') else ""
@@ -4103,16 +4706,57 @@ class ADHDTVPlayer(QMainWindow):
         num_input = QLineEdit(); num_input.setPlaceholderText("Number")
         title_input = QLineEdit(); title_input.setPlaceholderText("Title (optional)")
         url_input = QLineEdit(); url_input.setPlaceholderText("Source Page URL")
-        logo_input = QLineEdit(); logo_input.setPlaceholderText("Logo URL (optional)")
-        pick_logo_btn = QPushButton("Pick Logo (Open DB)")
+        logo_input = QLineEdit(); logo_input.setPlaceholderText("Logo URL or path (optional)")
 
         row1.addWidget(num_input)
         row1.addWidget(title_input)
         row2.addWidget(url_input)
         row2.addWidget(logo_input)
-        row2.addWidget(pick_logo_btn)
+        row2.addStretch(1)
         form_layout.addLayout(row1)
         form_layout.addLayout(row2)
+
+        # In-memory cache to avoid repeated logo fetches while dialog is open
+        logo_cache: Dict[Tuple[str, int, int, bool], QPixmap] = {}
+
+        def _logo_pixmap(path: str, size: QSize, allow_remote: bool = True) -> QPixmap:
+            """Shared logo loader for list and preview with caching."""
+            key = (path, size.width(), size.height(), allow_remote)
+            if path and key in logo_cache:
+                return logo_cache[key]
+
+            pix = QPixmap()
+            if not path:
+                logo_cache[key] = pix
+                return pix
+
+            if allow_remote and path.startswith(("http://", "https://")):
+                try:
+                    resp = requests.get(path, timeout=3)
+                    if resp.ok:
+                        pix.loadFromData(resp.content)
+                except Exception:
+                    pix = QPixmap()
+
+            if pix.isNull():
+                p = Path(path)
+                candidates = [p]
+                if not p.is_absolute():
+                    candidates.append(Path.cwd() / path)
+                    candidates.append(Path.cwd() / "assets" / "logos" / p.name)
+                for cand in candidates:
+                    cand = cand.resolve()
+                    if cand.exists():
+                        pix = QPixmap(str(cand))
+                        if not pix.isNull():
+                            break
+
+            if not pix.isNull():
+                pix = pix.scaled(size, Qt.AspectRatioMode.KeepAspectRatio,
+                                 Qt.TransformationMode.SmoothTransformation)
+
+            logo_cache[key] = pix
+            return pix
 
         # Preview box for current logo
         preview_box = QGroupBox("Logo Preview")
@@ -4120,7 +4764,8 @@ class ADHDTVPlayer(QMainWindow):
         logo_preview = QLabel()
         logo_preview.setFixedSize(140, 80)
         logo_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_preview.setStyleSheet("border: 1px solid #555; background: #111;")
+        # Match the player badge background (light gray with subtle border)
+        logo_preview.setStyleSheet("border: 1px solid #999; background: #e5e5e5; color: #333;")
         preview_layout.addWidget(logo_preview)
         form_layout.addWidget(preview_box)
 
@@ -4141,22 +4786,29 @@ class ADHDTVPlayer(QMainWindow):
             list_widget.clear()
             for num in sorted(self.channels.keys()):
                 ch = self.channels[num]
-                list_widget.addItem(f"{num}: {ch.get('title', ch.get('url'))}")
+                text = f"{num}: {ch.get('title', ch.get('url'))}"
+                item = QListWidgetItem(text)
+                # Avoid remote fetches while building the list to keep the UI responsive
+                pix = _logo_pixmap(ch.get('logo', ''), QSize(80, 45), allow_remote=False)
+                if pix and not pix.isNull():
+                    item.setIcon(QIcon(pix))
+                list_widget.addItem(item)
 
-        def update_logo_preview(url: str):
-            if not url:
-                logo_preview.setPixmap(QPixmap())
-                logo_preview.setText("No logo")
+        def update_logo_preview(path: str):
+            """Unified preview loader (matches edit dialog behavior)."""
+            logo_preview.setPixmap(QPixmap())
+            logo_preview.setText("No logo")
+            if not path:
                 return
-            pix, err = _load_logo_pixmap(url, logo_preview.size())
-            if pix:
-                logo_preview.setPixmap(pix)
-                logo_preview.setText("")
-            else:
-                # Fallback to text badge
+            pix = _logo_pixmap(path, logo_preview.size(), allow_remote=True)
+            if pix.isNull():
                 title_text = title_input.text().strip() or num_input.text().strip() or "Channel"
                 logo_preview.setPixmap(_fallback_text_logo(title_text, logo_preview.size()))
-                logo_preview.setText("" if not err else f"{err[:40]}")
+                logo_preview.setText("")
+                return
+
+            logo_preview.setPixmap(pix)
+            logo_preview.setText("")
 
         def build_entry(num: int, require_existing: bool):
             url = url_input.text().strip()
@@ -4248,99 +4900,74 @@ class ADHDTVPlayer(QMainWindow):
             logo_input.setText(ch.get('logo', ''))
             update_logo_preview(ch.get('logo', ''))
 
-        def pick_logo_from_open_db():
-            query = title_input.text().strip() or num_input.text().strip() or url_input.text().strip()
-            if not query:
-                QMessageBox.information(dialog, "Need a query", "Enter title or channel number first.")
-                return
-            try:
-                cache = getattr(self, '_open_logo_db_cache', {})
-                channels_data = cache.get('channels')
-                logos_data = cache.get('logos')
-                logo_map = cache.get('logo_map')
-                if channels_data is None or logos_data is None or logo_map is None:
-                    ch_resp = requests.get("https://iptv-org.github.io/api/channels.json", timeout=12)
-                    logo_resp = requests.get("https://iptv-org.github.io/api/logos.json", timeout=12)
-                    channels_data = ch_resp.json() if ch_resp.ok else []
-                    logos_data = logo_resp.json() if logo_resp.ok else []
-                    logo_map = {}
-                    for entry in logos_data:
-                        cid = entry.get('channel')
-                        url = entry.get('url')
-                        if cid and url and cid not in logo_map:
-                            logo_map[cid] = url
-                    self._open_logo_db_cache = {'channels': channels_data, 'logos': logos_data, 'logo_map': logo_map}
-
-                q = query.lower()
-                candidates = []
-                for ch in channels_data:
-                    haystack = " ".join([
-                        ch.get('name', ''),
-                        ch.get('callsign', ''),
-                        ch.get('id', ''),
-                        " ".join(ch.get('alt_names', []) or [])
-                    ]).lower()
-                    if q in haystack:
-                        logo_url = logo_map.get(ch.get('id'))
-                        if not logo_url:
-                            continue
-                        candidates.append((ch, logo_url))
-                    if len(candidates) >= 40:
-                        break
-                if not candidates:
-                    QMessageBox.information(dialog, "No logos", "No matching channels with logos found in the open DB.")
-                    return
-
-                chooser = QDialog(dialog)
-                chooser.setWindowTitle("Pick Logo")
-                chooser.resize(440, 340)
-                v = QVBoxLayout(chooser)
-                lw = QListWidget()
-                lw.setIconSize(QSize(120, 60))
-                for ch, logo_url in candidates:
-                    name = ch.get('name') or ch.get('callsign') or 'Unknown'
-                    country = (ch.get('country') or '').upper()
-                    label = f"{name} ({country})"
-                    item = QListWidgetItem(label)
-                    pix, _ = _load_logo_pixmap(logo_url, QSize(120, 60))
-                    if not pix:
-                        pix = _fallback_text_logo(name, QSize(120, 60))
-                    item.setIcon(QIcon(pix))
-                    item.setData(Qt.ItemDataRole.UserRole, {'logo': logo_url, 'name': name})
-                    lw.addItem(item)
-                v.addWidget(lw)
-                buttons = QHBoxLayout()
-                ok_btn = QPushButton("Select")
-                cancel_btn = QPushButton("Cancel")
-                buttons.addWidget(ok_btn)
-                buttons.addWidget(cancel_btn)
-                v.addLayout(buttons)
-
-                picked = {}
-                def choose():
-                    item = lw.currentItem()
-                    if item:
-                        picked.update(item.data(Qt.ItemDataRole.UserRole) or {})
-                    chooser.accept()
-                ok_btn.clicked.connect(choose)
-                cancel_btn.clicked.connect(chooser.reject)
-                lw.itemDoubleClicked.connect(lambda _: choose())
-
-                if chooser.exec() == QDialog.DialogCode.Accepted and picked:
-                    logo_url = picked.get('logo') or ''
-                    if logo_url:
-                        logo_input.setText(logo_url)
-                        update_logo_preview(logo_url)
-                    if not title_input.text().strip() and picked.get('name'):
-                        title_input.setText(picked.get('name'))
-            except Exception as e:
-                QMessageBox.warning(dialog, "Logo lookup failed", f"Could not fetch open logo database: {e}")
-
         list_widget.currentRowChanged.connect(lambda _: on_select())
-        pick_logo_btn.clicked.connect(pick_logo_from_open_db)
         logo_input.textChanged.connect(lambda text: update_logo_preview(text))
 
         dialog.exec()
+
+    def open_tv_guide_dialog(self):
+        """Open the fixed-size TV Guide renderer."""
+        try:
+            known = [(num, ch.get("title", str(num))) for num, ch in self.channels.items()]
+            dlg = GuideDialog(
+                guide_data=self.guide_data,
+                logo_resolver=self.guide_logo_resolver,
+                known_channels=known,
+                parent=self,
+            )
+            # If we only have the sample stub, trigger a fetch and refresh the dialog on completion
+            if len(self.guide_data.channels) <= 4:
+                self._load_guide_data_async(force=True, on_done=lambda data: dlg.update_data(data))
+            dlg.exec()
+        except Exception as e:
+            QMessageBox.warning(self, "Guide Error", f"Failed to open guide: {e}")
+
+    def _load_guide_data_async(self, force: bool = False, on_done=None):
+        """Fetch a broad US guide lineup from TVMaze without blocking UI."""
+        if self._guide_fetch_inflight:
+            return
+        if not force and len(getattr(self, 'guide_data', {}).channels) > 4:
+            return
+        self._guide_fetch_inflight = True
+
+        def work():
+            try:
+                adapter = TVMazeAdapter(self.guide_logo_resolver)
+                known = [(num, ch.get("title", str(num))) for num, ch in self.channels.items()]
+                data = adapter.fetch(country="US", max_channels=200, known_channels=known)
+                return data, ""
+            except Exception as e:
+                return None, str(e)
+
+        def done(result):
+            self._guide_fetch_inflight = False
+            data, err = result
+            if data:
+                self.guide_data = data
+                self.status_bar.showMessage(f"Guide data loaded ({len(data.channels)} channels)")
+                if on_done:
+                    try:
+                        on_done(data)
+                    except Exception:
+                        pass
+            elif err:
+                self.status_bar.showMessage(f"Guide load failed: {err}")
+
+        thread_result = {}
+
+        def runner():
+            thread_result["value"] = work()
+
+        t = threading.Thread(target=runner, daemon=True)
+        t.start()
+
+        def poll():
+            if "value" in thread_result:
+                done(thread_result["value"])
+            else:
+                QTimer.singleShot(150, poll)
+
+        poll()
 
     def set_channel_lineup(self):
         text, ok = QInputDialog.getText(self, 'Set Lineup', 'Enter lineup label (e.g., "Spectrum Corpus Christi"):')
@@ -5490,10 +6117,27 @@ def main(app_state: Optional[Any] = None, config: Optional[Dict[str, Any]] = Non
     window = WebGridPlayer(app_state=app_state, config=config)
     if window.display_mode == "fullscreen":
         window.showFullScreen()
+        # Force grid to fill window
+        if hasattr(window, 'grid_container') and window.centralWidget():
+            window.grid_container.resize(window.centralWidget().size())
+            window.grid_container.updateGeometry()
+            if hasattr(window, 'grid_layout'):
+                window.grid_layout.update()
     elif window.display_mode == "maximized":
         window.showMaximized()
+        # Force grid to fill window
+        if hasattr(window, 'grid_container') and window.centralWidget():
+            window.grid_container.resize(window.centralWidget().size())
+            window.grid_container.updateGeometry()
+            if hasattr(window, 'grid_layout'):
+                window.grid_layout.update()
     else:
         window.show()
+        if hasattr(window, 'grid_container') and window.centralWidget():
+            window.grid_container.resize(window.centralWidget().size())
+            window.grid_container.updateGeometry()
+            if hasattr(window, 'grid_layout'):
+                window.grid_layout.update()
     
     return app.exec()
 
