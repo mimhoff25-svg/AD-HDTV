@@ -1,0 +1,11 @@
+[
+  {
+    "url": "http://example.com/a",
+    "title": "Example A"
+  },
+  {
+    "url": "https://v5.thetvapp.to/hls/FoxNewsChannel/tracks-v1a1/mono.m3u8?token=AICAwaSSQSo4pQlRFqvYqQ&expires=1767780937&user_id=S3Z3bjNWT2pGWWJud2NEcUpWeFpERzBYakoya3RwUUNxSmliWmRUSA==",
+    "title": "https://v5.thetvapp.to/hls/FoxNewsChannel/tracks-v...",
+    "source_url": "https://thetvapp.to/tv/fox-news-channel-live-stream/"
+  }
+]

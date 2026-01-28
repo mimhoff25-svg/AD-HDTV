@@ -111,6 +111,13 @@ def main(argv: list[str] | None = None) -> int:
     from webgridplayer import main as app_main
     from webgridplayer import setup_logging
 
+    # Start remote API server in background thread
+    try:
+        import remote_api
+        threading.Thread(target=remote_api.run_api, daemon=True).start()
+    except Exception as e:
+        print(f"[WARN] Could not start remote API server: {e}")
+
     logger, _ = setup_logging(
         app_name=app_state.app_name,
         log_level=config.get("logging", {}).get("level", "INFO"),

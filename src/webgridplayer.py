@@ -3263,10 +3263,98 @@ class ADHDTVPlayer(QMainWindow):
         # Tools menu for troubleshooting
         tools_menu = menubar.addMenu('Tools')
         
+
         restore_audio_action = QAction('🔊 Restore All Audio', self)
         restore_audio_action.setToolTip('Emergency fix: Restore audio to all players')
         restore_audio_action.triggered.connect(self.force_audio_restore_all)
         tools_menu.addAction(restore_audio_action)
+
+
+        # API Server Settings menu entry
+        api_server_settings_action = QAction('API Server Settings', self)
+        api_server_settings_action.setToolTip('Configure API server address')
+        api_server_settings_action.triggered.connect(self.show_api_server_settings_dialog)
+        tools_menu.addAction(api_server_settings_action)
+
+        # API Options menu entry
+        api_options_action = QAction('API Options', self)
+        api_options_action.setToolTip('Show available remote API endpoints')
+        api_options_action.triggered.connect(self.show_api_options_dialog)
+        tools_menu.addAction(api_options_action)
+
+    def get_api_server_url(self):
+        import os
+        # Use a config file or environment variable for persistence
+        config_path = os.path.expanduser('~/.adhdtv_api_server_url')
+        default_url = 'http://localhost:5005'
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                url = f.read().strip()
+                if url:
+                    return url
+        return default_url
+
+    def set_api_server_url(self, url):
+        import os
+        config_path = os.path.expanduser('~/.adhdtv_api_server_url')
+        with open(config_path, 'w') as f:
+            f.write(url.strip())
+
+    def show_api_server_settings_dialog(self):
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
+        dialog = QDialog(self)
+        dialog.setWindowTitle('API Server Settings')
+        layout = QVBoxLayout()
+        label = QLabel('API Server URL:')
+        layout.addWidget(label)
+        url_edit = QLineEdit()
+        url_edit.setText(self.get_api_server_url())
+        layout.addWidget(url_edit)
+        save_btn = QPushButton('Save')
+        save_btn.clicked.connect(lambda: self.save_api_server_url(dialog, url_edit.text()))
+        layout.addWidget(save_btn)
+        cancel_btn = QPushButton('Cancel')
+        cancel_btn.clicked.connect(dialog.reject)
+        layout.addWidget(cancel_btn)
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def save_api_server_url(self, dialog, url):
+        self.set_api_server_url(url)
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.information(self, 'Saved', f'API server URL saved: {url}')
+        dialog.accept()
+
+    def show_api_options_dialog(self):
+        import requests
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit
+        dialog = QDialog(self)
+        dialog.setWindowTitle('AD-HDTV Remote API Options')
+        layout = QVBoxLayout()
+        info_label = QLabel('Fetching API options from /api_options...')
+        layout.addWidget(info_label)
+        text_area = QTextEdit()
+        text_area.setReadOnly(True)
+        layout.addWidget(text_area)
+        close_btn = QPushButton('Close')
+        close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(close_btn)
+        dialog.setLayout(layout)
+        api_url = self.get_api_server_url().rstrip('/') + '/api_options'
+        try:
+            resp = requests.get(api_url, timeout=3)
+            if resp.ok:
+                options = resp.json().get('api_options', [])
+                text = '\n'.join([
+                    f"{opt['method']} {opt['endpoint']}: {opt['description']}" for opt in options
+                ])
+                text_area.setText(text)
+                info_label.setText(f'Available API endpoints from {api_url}:')
+            else:
+                text_area.setText(f'Failed to fetch API options from {api_url}.')
+        except Exception as e:
+            text_area.setText(f'Error fetching API options from {api_url}: {e}')
+        dialog.exec()
 
         # Guide menu (classic TV listings)
         guide_menu = menubar.addMenu('Guide')

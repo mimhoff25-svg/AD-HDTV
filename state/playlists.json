@@ -1,0 +1,385 @@
+{
+  "news": {
+    "grid_size": [
+      2,
+      4
+    ],
+    "volume": 88,
+    "players": [
+      {
+        "index": 0,
+        "url": "https://v16.thetvapp.to/hls/WABCDT1/tracks-v1a1/mono.m3u8?token=4QA_vL9PBVnHRet9Q8lEgQ&expires=1767697249&user_id=RndFaW8wR291QktrTDU5RjJ3aTJqYm9kTW81UDFXVUFVOEJyZjhaYQ==",
+        "title": "https://v16.thetvapp.to/hls/WABCDT1/tracks-v1a1/mo...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 1,
+        "url": "https://v3.thetvapp.to/hls/WNBCDT1/tracks-v1a1/mono.m3u8?token=j9SyxVtsMkDQjszraJMc9g&expires=1767697299&user_id=RndFaW8wR291QktrTDU5RjJ3aTJqYm9kTW81UDFXVUFVOEJyZjhaYQ==",
+        "title": "https://v3.thetvapp.to/hls/WNBCDT1/tracks-v1a1/mon...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 2,
+        "url": "https://e3.thetvapp.to/hls/WCBSDT1/tracks-v1a1/mono.m3u8?token=BhZJVqwcIi1f1qGS7RDSgg&expires=1767697342&user_id=RndFaW8wR291QktrTDU5RjJ3aTJqYm9kTW81UDFXVUFVOEJyZjhaYQ==",
+        "title": "https://e3.thetvapp.to/hls/WCBSDT1/tracks-v1a1/mon...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 3,
+        "url": "https://e3.thetvapp.to/hls/WNBCDT1/tracks-v1a1/mono.m3u8?token=eEWVEC59STiEypd3z3Y-pg&expires=1767697395&user_id=RndFaW8wR291QktrTDU5RjJ3aTJqYm9kTW81UDFXVUFVOEJyZjhaYQ==",
+        "title": "https://e3.thetvapp.to/hls/WNBCDT1/tracks-v1a1/mon...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 4,
+        "url": "https://v12.thetvapp.to/hls/WNYWDT1/tracks-v1a1/mono.m3u8?token=4RETIXR4xxtNfBu6banXZw&expires=1767697498&user_id=RndFaW8wR291QktrTDU5RjJ3aTJqYm9kTW81UDFXVUFVOEJyZjhaYQ==",
+        "title": "https://v12.thetvapp.to/hls/WNYWDT1/tracks-v1a1/mo...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 5,
+        "url": "https://v14.thetvapp.to/hls/MSNBC/tracks-v1a1/mono.m3u8?token=a4iVkmw5WbdLPMDnRoXaJQ&expires=1767698114&user_id=RndFaW8wR291QktrTDU5RjJ3aTJqYm9kTW81UDFXVUFVOEJyZjhaYQ==",
+        "title": "https://v14.thetvapp.to/hls/MSNBC/tracks-v1a1/mono...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 6,
+        "url": "https://e2.thetvapp.to/hls/FoxNewsChannel/tracks-v1a1/mono.m3u8?token=0Cs4X8GBO-ZurHyXxinQMg&expires=1767700494&user_id=RndFaW8wR291QktrTDU5RjJ3aTJqYm9kTW81UDFXVUFVOEJyZjhaYQ==",
+        "title": "https://e2.thetvapp.to/hls/FoxNewsChannel/tracks-v...",
+        "is_muted": false,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      }
+    ]
+  },
+  "sports": {
+    "grid_size": [
+      2,
+      4
+    ],
+    "volume": 88,
+    "players": [
+      {
+        "index": 0,
+        "url": "https://v4.thetvapp.to/hls/ESPN/tracks-v1a1/mono.m3u8?token=i7ACryoMYumOJiyaJVAf6w&expires=1767960550&user_id=dFBQWWdmZ0lMNGtqNWFrRmplQjlPT0k3VFdZVXBhbG9mdkU5N3VNTQ==",
+        "title": "Ch 39: ESPN",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 39,
+        "source_url": "https://thetvapp.to/tv/espn-live-stream/"
+      },
+      {
+        "index": 1,
+        "url": "https://v2.thetvapp.to/hls/ESPN2/tracks-v1a1/mono.m3u8?token=xx2brbXHzC4j5CNWcy60AQ&expires=1767961665&user_id=dFBQWWdmZ0lMNGtqNWFrRmplQjlPT0k3VFdZVXBhbG9mdkU5N3VNTQ==",
+        "title": "Ch 71: ESPN2",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": null,
+        "source_url": "https://thetvapp.to/tv/espn2-live-stream/"
+      },
+      {
+        "index": 2,
+        "url": "https://v17.thetvapp.to/hls/ESPNews/tracks-v1a1/mono.m3u8?token=UlYLWphKjKCcs-pwR6qb_Q&expires=1767963938&user_id=dFBQWWdmZ0lMNGtqNWFrRmplQjlPT0k3VFdZVXBhbG9mdkU5N3VNTQ==",
+        "title": "Ch 302: ESPNews",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 302,
+        "source_url": "https://thetvapp.to/tv/espnews-live-stream/"
+      },
+      {
+        "index": 3,
+        "url": "https://v4.thetvapp.to/hls/CBSSportsNetworkUSA/tracks-v1a1/mono.m3u8?token=S7OIXFv_O1HO9P8ScoWRzw&expires=1767960555&user_id=dFBQWWdmZ0lMNGtqNWFrRmplQjlPT0k3VFdZVXBhbG9mdkU5N3VNTQ==",
+        "title": "Ch 54: CBS Sports Network",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 54,
+        "source_url": "https://thetvapp.to/tv/cbs-sports-network-live-stream/"
+      },
+      {
+        "index": 4,
+        "url": "https://v1.thetvapp.to/hls/NHLNetwork/tracks-v1a1/mono.m3u8?token=c9e16SJWQLwsvkqVLDyD1A&expires=1767964586&user_id=dFBQWWdmZ0lMNGtqNWFrRmplQjlPT0k3VFdZVXBhbG9mdkU5N3VNTQ==",
+        "title": "Ch 310: NHL Network",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": null,
+        "source_url": "https://thetvapp.to/tv/nhl-network-live-stream/"
+      },
+      {
+        "index": 5,
+        "url": "https://v15.thetvapp.to/hls/NBATV/tracks-v1a1/mono.m3u8?token=Gwcs6MSf7LeOzQwbzHUA6w&expires=1767963733&user_id=dFBQWWdmZ0lMNGtqNWFrRmplQjlPT0k3VFdZVXBhbG9mdkU5N3VNTQ==",
+        "title": "Ch 308: NBA TV",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": null,
+        "source_url": "https://thetvapp.to/tv/nba-tv-live-stream/"
+      },
+      {
+        "index": 6,
+        "url": "https://v4.thetvapp.to/hls/FoxSports1/tracks-v1a1/mono.m3u8?token=xt0KCOrd2Z4LTJnfDWI0Gg&expires=1767960553&user_id=dFBQWWdmZ0lMNGtqNWFrRmplQjlPT0k3VFdZVXBhbG9mdkU5N3VNTQ==",
+        "title": "Ch 49: FS1",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 49,
+        "source_url": "https://thetvapp.to/tv/fox-sports-1-live-stream/"
+      },
+      {
+        "index": 7,
+        "url": "https://v18.thetvapp.to/hls/FoxSports2/tracks-v1a1/mono.m3u8?token=V4TQSeRvbWw8BFvBrOO8Cg&expires=1767965318&user_id=dFBQWWdmZ0lMNGtqNWFrRmplQjlPT0k3VFdZVXBhbG9mdkU5N3VNTQ==",
+        "title": "Ch 95: FS2",
+        "is_muted": false,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 95,
+        "source_url": "https://thetvapp.to/tv/fox-sports-2-live-stream/"
+      }
+    ]
+  },
+  "The big 4": {
+    "grid_size": [
+      2,
+      2
+    ],
+    "volume": 70,
+    "players": [
+      {
+        "index": 0,
+        "url": "https://e2.thetvapp.to/hls/WNBCDT1/tracks-v1a1/mono.m3u8?token=PKO-ZYkAvQR6gDybKwIKlg&expires=1767751280&user_id=YWViZUNHSlNpR1FRUXhoVjZCaTgwY01EOHBmRW1oM25YdHZVWmNtVg==",
+        "title": "https://e2.thetvapp.to/hls/WNBCDT1/tracks-v1a1/mon...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 1,
+        "url": "https://e1.thetvapp.to/hls/WABCDT1/tracks-v1a1/mono.m3u8?token=PtGAJCK1XnXbw-yt89uDWw&expires=1767751105&user_id=YWViZUNHSlNpR1FRUXhoVjZCaTgwY01EOHBmRW1oM25YdHZVWmNtVg==",
+        "title": "https://e1.thetvapp.to/hls/WABCDT1/tracks-v1a1/mon...",
+        "is_muted": false,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 2,
+        "url": "https://e4.thetvapp.to/hls/WCBSDT1/tracks-v1a1/mono.m3u8?token=PuriS5OYOiqjwoGIuZlL5g&expires=1767751503&user_id=YWViZUNHSlNpR1FRUXhoVjZCaTgwY01EOHBmRW1oM25YdHZVWmNtVg==",
+        "title": "https://e4.thetvapp.to/hls/WCBSDT1/tracks-v1a1/mon...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 3,
+        "url": "https://v18.thetvapp.to/hls/WNYWDT1/tracks-v1a1/mono.m3u8?token=w_NGkMko7r8dpnphso6ZSw&expires=1767751547&user_id=YWViZUNHSlNpR1FRUXhoVjZCaTgwY01EOHBmRW1oM25YdHZVWmNtVg==",
+        "title": "https://v18.thetvapp.to/hls/WNYWDT1/tracks-v1a1/mo...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      }
+    ]
+  },
+  "News networks": {
+    "grid_size": [
+      2,
+      4
+    ],
+    "volume": 70,
+    "players": [
+      {
+        "index": 0,
+        "url": "https://v17.thetvapp.to/hls/FoxNewsChannel/tracks-v1a1/mono.m3u8?token=suuxiXZqGfft8XTQy1O6Uw&expires=1767754801&user_id=amFpaDloV0dyR3BnVWdIbUV6enNQRW44cURjV0p4UUZPbnVsck5qOA==",
+        "title": "https://v17.thetvapp.to/hls/FoxNewsChannel/tracks-...",
+        "is_muted": false,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 1,
+        "url": "https://v5.thetvapp.to/hls/MSNBC/tracks-v1a1/mono.m3u8?token=_PTNlDDUc-Q02Gv6VVqdPQ&expires=1767757149&user_id=RjJITk5TU3FBeWRab1VzVnFvVnl4THA1SWU5dEFBOENzWnVid05Jbg==",
+        "title": "https://v5.thetvapp.to/hls/MSNBC/tracks-v1a1/mono....",
+        "is_muted": false,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 2,
+        "url": "https://e1.thetvapp.to/hls/CNN/tracks-v1a1/mono.m3u8?token=VQvwg4GWPvRWtiZEMTFM3A&expires=1767757324&user_id=RjJITk5TU3FBeWRab1VzVnFvVnl4THA1SWU5dEFBOENzWnVid05Jbg==",
+        "title": "https://e1.thetvapp.to/hls/CNN/tracks-v1a1/mono.m3...",
+        "is_muted": false,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      },
+      {
+        "index": 3,
+        "url": "https://v4.thetvapp.to/hls/BBCWorldNewsNorthAmerica/tracks-v1a1/mono.m3u8?token=xfNvpjEhGPIg8fcgBE34Jw&expires=1767757704&user_id=RjJITk5TU3FBeWRab1VzVnFvVnl4THA1SWU5dEFBOENzWnVid05Jbg==",
+        "title": "https://v4.thetvapp.to/hls/BBCWorldNewsNorthAmeric...",
+        "is_muted": false,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false
+      }
+    ]
+  },
+  "News": {
+    "grid_size": [
+      2,
+      4
+    ],
+    "volume": 70,
+    "players": [
+      {
+        "index": 0,
+        "url": "https://v12.thetvapp.to/hls/FoxNewsChannel/tracks-v1a1/mono.m3u8?token=1XQxF5nq2OkgUz47Wf1KXg&expires=1767845071&user_id=a21oeFQ4SUdRbDJHemF1d0xqcUJpbTFPSkVCSXhrM0lwQ1RJQnhQSA==",
+        "title": "https://v12.thetvapp.to/hls/FoxNewsChannel/tracks-...",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "source_url": "https://thetvapp.to/tv/fox-news-channel-live-stream/"
+      },
+      {
+        "index": 1,
+        "url": "https://v12.thetvapp.to/hls/CNN/tracks-v1a1/mono.m3u8?token=O9cfydDmUKdiyNh6qpZZew&expires=1767845070&user_id=emtDbGl5MktVOWdaOWxwUk5FbTVLR082bUdNMk81T3RmNDlEQnhDcA==",
+        "title": "Ch 24: CNN",
+        "is_muted": false,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "source_url": "https://thetvapp.to/tv/cnn-live-stream/"
+      },
+      {
+        "index": 2,
+        "url": "https://v12.thetvapp.to/hls/MSNBC/tracks-v1a1/mono.m3u8?token=79AHUb7hGfxeV7GzDIsvbg&expires=1767845072&user_id=emtDbGl5MktVOWdaOWxwUk5FbTVLR082bUdNMk81T3RmNDlEQnhDcA==",
+        "title": "Ch 56: Ms Now",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "source_url": "https://thetvapp.to/tv/msnbc-live-stream/"
+      },
+      {
+        "index": 3,
+        "url": "https://v12.thetvapp.to/hls/BBCWorldNewsNorthAmerica/tracks-v1a1/mono.m3u8?token=WDpPBd11lzwZZgzGDUe5ig&expires=1767845072&user_id=ZlRqUXFhZ0pYQWZFaXRtNUVUaENLeG5ET2xzTTBHQzVJalliVjR1Wg==",
+        "title": "Ch 74: BBC News",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "source_url": "https://thetvapp.to/tv/bbc-world-news-hd-live-stream/"
+      }
+    ]
+  },
+  "NEWS": {
+    "grid_size": [
+      2,
+      3
+    ],
+    "volume": 70,
+    "players": [
+      {
+        "index": 0,
+        "url": "https://v8.thetvapp.to/hls/FoxNewsChannel/tracks-v1a1/mono.m3u8?token=MitwiUpUfQ2qoRRq8CTLBA&expires=1767932181&user_id=Y3Y5T1hWcE9Jbk5KVWhwYjZQZEpIR08yck03ZFVqUmUzVGtMTUl5Uw==",
+        "title": "Ch 55: Fox News",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 55,
+        "source_url": "https://thetvapp.to/tv/fox-news-channel-live-stream/"
+      },
+      {
+        "index": 1,
+        "url": "https://v4.thetvapp.to/hls/CNN/tracks-v1a1/mono.m3u8?token=91B83N0xqZbgjGenP_fkRg&expires=1767932171&user_id=V1JYVWtBQzRubThieUdETGdBNUlKUU9LU3p6Z1JPTzZEMXlXNURJdw==",
+        "title": "Ch 24: CNN",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 24,
+        "source_url": "https://thetvapp.to/tv/cnn-live-stream/"
+      },
+      {
+        "index": 2,
+        "url": "https://v8.thetvapp.to/hls/MSNBC/tracks-v1a1/mono.m3u8?token=ZifgB8f4nHrEOuM8Hfv2fA&expires=1767932182&user_id=TGtUUFN3bll1TzhUbnQ5eHlHcDJrQW5OWFA2UlFsbHBhcEF3MXFSZA==",
+        "title": "Ch 56: Ms Now",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 56,
+        "source_url": "https://thetvapp.to/tv/msnbc-live-stream/"
+      },
+      {
+        "index": 3,
+        "url": "https://v17.thetvapp.to/hls/WABCDT1/tracks-v1a1/mono.m3u8?token=Xm-WSvuAx17GhQw0nKV_1w&expires=1767936769&user_id=NUxwcEFyMHI5cjB4Wk9uRGUyM1NFc25lU1UwYm9yNGo0dnhoN09ydQ==",
+        "title": "Ch 5: ABC",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 5,
+        "source_url": "https://thetvapp.to/tv/wabc-new-york-abc-east-live-stream/"
+      },
+      {
+        "index": 4,
+        "url": "https://v14.thetvapp.to/hls/WNBCDT1/tracks-v1a1/mono.m3u8?token=1FW3zC-73ZkZFq2yYpMUdw&expires=1767932169&user_id=TGtUUFN3bll1TzhUbnQ5eHlHcDJrQW5OWFA2UlFsbHBhcEF3MXFSZA==",
+        "title": "Ch 7: NBC",
+        "is_muted": true,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 7,
+        "source_url": "https://thetvapp.to/tv/wnbc-new-york-nbc-east-live-stream/"
+      },
+      {
+        "index": 5,
+        "url": "https://v4.thetvapp.to/hls/WCBSDT1/tracks-v1a1/mono.m3u8?token=3iMsValQ_Wd8lpvOdmzPMQ&expires=1767932170&user_id=NUxwcEFyMHI5cjB4Wk9uRGUyM1NFc25lU1UwYm9yNGo0dnhoN09ydQ==",
+        "title": "Ch 12: CBS",
+        "is_muted": false,
+        "start_time": 0,
+        "end_time": 0,
+        "is_clipped": false,
+        "current_channel_number": 12,
+        "source_url": "https://thetvapp.to/tv/wcbs-new-york-cbs-east-live-stream/"
+      }
+    ]
+  }
+}
