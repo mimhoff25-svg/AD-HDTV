@@ -69,11 +69,13 @@
 
 ## Remote API Endpoints
 
-- `POST /play` — Start playback (**Implemented**)
-- `POST /pause` — Pause playback (**Implemented**)
-- `POST /channel_up` — Increase channel number (**Implemented**)
-- `POST /channel_down` — Decrease channel number (**Implemented**)
-- `GET /status` — Get current player status (**Implemented**)
+| Endpoint | Method | Description | Status |
+|----------|--------|-------------|--------|
+| `/play` | POST | Start playback | Implemented |
+| `/pause` | POST | Pause playback | Implemented |
+| `/channel_up` | POST | Increase channel number | Implemented |
+| `/channel_down` | POST | Decrease channel number | Implemented |
+| `/status` | GET | Get current player status | Implemented |
 
 See `docs/API.md` for the evolving contract.
 
