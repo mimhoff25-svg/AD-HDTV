@@ -1,7 +1,8 @@
 
+---
 # AD-HDTV 🎥
 
-**AD-HDTV** is a cross-platform, open-source broadcast engine and multi-client video grid system. It features a Python backend (ServerX) and supports multiple clients, including Roku and Android remote apps.
+**AD-HDTV** is a server-hosted broadcast and TV guide system. The backend (ServerX) runs on Python and VLC, with planned clients for Roku and Android remote control. A TV guide grid renderer is a core feature.
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
@@ -12,7 +13,7 @@
 
 ## What is AD-HDTV?
 
-AD-HDTV is a powerful, extensible video grid player and broadcast engine. It enables:
+AD-HDTV is a cross-platform, extensible video grid player and broadcast engine. It enables:
 - Multi-video grid playback (1x1 to 4x4)
 - Intelligent web stream extraction
 - Synchronized controls and advanced video features
@@ -27,19 +28,25 @@ AD-HDTV is a powerful, extensible video grid player and broadcast engine. It ena
 
 ---
 
-## High-Level Architecture
+## Current Status
 
-```
-AD-HDTV/
-├── server/ (Python backend: grid engine, API, extraction)
-├── clients/
-│   ├── android/ (Android remote app)
-│   └── roku/    (Roku client)
-├── assets/      (logos, graphics)
-├── docs/        (documentation)
-├── scripts/     (install, dev tools)
-├── tests/       (unit/integration tests)
-```
+- Core backend (Python, VLC) is runnable: grid video playback, stream extraction, basic controls
+- Legacy scripts and desktop integration available (see legacy/)
+- Remote API (planned/in progress)
+- TV guide grid renderer (planned)
+- Roku and Android clients (planned)
+
+---
+
+## Repo Layout
+
+- `src/` — Main backend code (grid engine, extraction, etc.)
+- `config/` — Configuration and profiles
+- `docs/` — Documentation, API contract
+- `scripts/` — Install and dev scripts
+- `tests/` — Unit/integration tests
+- `clients/` — Thin frontends (android, roku)
+- `legacy/` — Old scripts and files (WebGridPlayer)
 
 ---
 

@@ -30,8 +30,8 @@ For questions, open an issue or discussion.
 1. **Fork** the repository on GitHub
 2. **Clone** your fork locally:
    ```bash
-   git clone https://github.com/yourusername/webgridplayer.git
-   cd webgridplayer
+   git clone https://github.com/mimhoff25-svg/AD-HDTV.git
+   cd AD-HDTV
    ```
 3. **Create** a virtual environment and install dependencies:
    ```bash
@@ -50,14 +50,14 @@ For questions, open an issue or discussion.
 ## 🎯 Ways to Contribute
 
 ### 🐛 Bug Reports
-- Use the [GitHub Issues](https://github.com/yourusername/webgridplayer/issues) page
+Use the [GitHub Issues](https://github.com/mimhoff25-svg/AD-HDTV/issues) page
 - Check if the issue already exists
 - Provide detailed reproduction steps
 - Include system information (OS, Python version, VLC version)
 - Add screenshots or videos if relevant
 
 ### 💡 Feature Requests
-- Use [GitHub Discussions](https://github.com/yourusername/webgridplayer/discussions) for ideas
+Use [GitHub Discussions](https://github.com/mimhoff25-svg/AD-HDTV/discussions) for ideas
 - Describe the use case and benefits
 - Consider implementation complexity
 - Be open to alternative approaches
@@ -92,11 +92,10 @@ pip install pytest black flake8 mypy
 
 ### Code Structure
 ```
-webgridplayer/
-├── webgridplayer.py      # Main application
-├── requirements.txt      # Dependencies
-├── install_webgridplayer.sh  # Installation script
-├── run_webgridplayer.sh     # Run script
+src/
+├── adhdtv.py            # Main application
+├── requirements.txt     # Dependencies
+├── legacy/              # Legacy scripts (see legacy/README.md)
 ├── test_stream_extraction.py  # Tests
 └── examples.py          # Usage examples
 ```
@@ -104,7 +103,7 @@ webgridplayer/
 ### Key Classes
 - `VideoStreamExtractor`: Web scraping and stream detection
 - `VideoPlayer`: Individual VLC player wrapper
-- `WebGridPlayer`: Main application and GUI
+Legacy scripts: see legacy/README.md
 
 ## 🧪 Testing
 
@@ -117,7 +116,7 @@ python test_stream_extraction.py
 python test_installation.py
 
 # Manual testing
-python webgridplayer.py
+python src/adhdtv.py
 ```
 
 ### Test Coverage
@@ -131,8 +130,8 @@ When adding new features, please include tests for:
 
 ### Python Style
 - Follow **PEP 8** style guidelines
-- Use **Black** for code formatting: `black webgridplayer.py`
-- Use **flake8** for linting: `flake8 webgridplayer.py`
+- Use **Black** for code formatting: `black src/adhdtv.py`
+- Use **flake8** for linting: `flake8 src/adhdtv.py`
 - Add **type hints** where appropriate
 
 ### Code Quality
@@ -219,7 +218,7 @@ def extract_custom_site(self, url: str, soup: BeautifulSoup) -> List[Dict]:
 ## 🌍 Internationalization
 
 ### Adding Translations
-We welcome translations to make WebGridPlayer accessible worldwide:
+We welcome translations to make AD-HDTV accessible worldwide:
 
 1. Create translation files in `translations/` directory
 2. Use Qt's internationalization system
@@ -264,7 +263,7 @@ Contributors will be recognized in:
 ### Communication Channels
 - **GitHub Issues**: Bug reports and feature requests
 - **GitHub Discussions**: General questions and ideas
-- **Email**: maintainer@webgridplayer.org (if available)
+- **Email**: maintainer@adhdtv.org (if available)
 
 ### Development Questions
 - Check existing issues and discussions first
@@ -274,8 +273,8 @@ Contributors will be recognized in:
 
 ## 📄 License
 
-By contributing to WebGridPlayer, you agree that your contributions will be licensed under the same license as the project (MIT License).
+By contributing to AD-HDTV, you agree that your contributions will be licensed under the same license as the project (GPLv3).
 
 ---
 
-Thank you for contributing to WebGridPlayer! Your efforts help make this tool better for everyone. 🙏
+Thank you for contributing to AD-HDTV! Your efforts help make this tool better for everyone. 🙏
