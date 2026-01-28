@@ -1,3 +1,8 @@
+# Dependency Management
+
+AD-HDTV uses `requirements.txt` as the canonical source for Python dependencies. Always update `requirements.txt` when adding or removing dependencies.
+
+`pyproject.toml` is provided for packaging and metadata only. Do not edit dependencies there unless publishing to PyPI.
 # AD-HDTV Quick Start Guide 🚀
 
 ## 30-Second Setup
