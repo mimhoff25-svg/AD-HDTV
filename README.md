@@ -1,4 +1,111 @@
+
 # AD-HDTV 🎥
+
+**AD-HDTV** is a cross-platform, open-source broadcast engine and multi-client video grid system. It features a Python backend (ServerX) and supports multiple clients, including Roku and Android remote apps.
+
+[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org)
+[![License](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
+[![VLC Powered](https://img.shields.io/badge/powered%20by-VLC-orange.svg)](https://www.videolan.org/vlc/)
+[![Cross Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](PLATFORM_COMPATIBILITY.md)
+
+---
+
+## What is AD-HDTV?
+
+AD-HDTV is a powerful, extensible video grid player and broadcast engine. It enables:
+- Multi-video grid playback (1x1 to 4x4)
+- Intelligent web stream extraction
+- Synchronized controls and advanced video features
+- Extensible API for remote control (Roku, Android, web)
+
+**Architecture:**
+- **Backend:** Python (ServerX) with VLC/libvlc, PyQt, and web extraction
+- **Clients:**
+  - Roku (planned)
+  - Android remote app (planned)
+  - Web/desktop (current)
+
+---
+
+## High-Level Architecture
+
+```
+AD-HDTV/
+├── server/ (Python backend: grid engine, API, extraction)
+├── clients/
+│   ├── android/ (Android remote app)
+│   └── roku/    (Roku client)
+├── assets/      (logos, graphics)
+├── docs/        (documentation)
+├── scripts/     (install, dev tools)
+├── tests/       (unit/integration tests)
+```
+
+---
+
+## How to Run the Backend
+
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Launch the backend:
+   ```bash
+   python app.py
+   # or
+   ./run_adhdtv.sh
+   ```
+3. (Optional) Run remote API server:
+   ```bash
+   python remote_api.py
+   ```
+
+---
+
+## API Endpoints (Planned)
+
+- `GET /status` — Health/status check
+- `POST /control/channel/next` — Next channel
+- `POST /control/channel/prev` — Previous channel
+- `POST /control/channel/set?id=N` — Set channel by ID
+- `POST /control/select?row=X&col=Y` — Select grid cell
+
+See `docs/API.md` for the evolving contract.
+
+---
+
+## Roadmap
+
+- [ ] Guide renderer (EPG)
+- [ ] Roku client
+- [ ] Android remote app
+- [ ] REST API for remote control
+- [ ] Improved web extraction
+- [ ] Multi-user support
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch strategy, commit style, and rules.
+
+---
+
+## License
+
+This project is licensed under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
+
+---
+
+## Support & Community
+
+- Documentation: [docs/](docs/)
+- Issues: [GitHub Issues](https://github.com/yourusername/adhdtv/issues)
+- Feature requests: [Discussions](https://github.com/yourusername/adhdtv/discussions)
+
+---
+
+**AD-HDTV: The open video grid engine for everyone.**
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
