@@ -177,10 +177,4 @@ Desktop.ini
 *.swp
 *.swo
 
-# WebGridPlayer specific
-*.log
-config.ini
-user_settings.json
-cache/
-temp/
-state/
+
