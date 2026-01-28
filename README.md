@@ -5,7 +5,7 @@
 **AD-HDTV** is a server-hosted broadcast and TV guide system. The backend (ServerX) runs on Python and VLC, with planned clients for Roku and Android remote control. A TV guide grid renderer is a core feature.
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org)
-[![License](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![VLC Powered](https://img.shields.io/badge/powered%20by-VLC-orange.svg)](https://www.videolan.org/vlc/)
 [![Cross Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](PLATFORM_COMPATIBILITY.md)
 
@@ -100,7 +100,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branch strategy, commit style, and ru
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0** — see [LICENSE](LICENSE).
+This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
 
 ---
 
@@ -112,18 +112,8 @@ This project is licensed under the **GNU General Public License v3.0** — see [
 
 ---
 
+
 **AD-HDTV: The open video grid engine for everyone.**
-
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![VLC Powered](https://img.shields.io/badge/powered%20by-VLC-orange.svg)](https://www.videolan.org/vlc/)
-[![Cross Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](PLATFORM_COMPATIBILITY.md)
-
-**AD-HDTV** (formerly WebGridPlayer) is a powerful VLC-based multi-video player with intelligent web stream extraction capabilities. Play multiple videos simultaneously in a customizable grid layout with synchronized controls, advanced video clipping, and automatic extraction of video streams from web pages.
-
-**🌍 Cross-Platform**: Works on Linux, Windows, and macOS - see [Platform Compatibility Guide](PLATFORM_COMPATIBILITY.md) for details.
-
-![AD-HDTV Demo](https://via.placeholder.com/800x450/1e1e1e/ffffff?text=AD-HDTV+Demo)
 
 ## ✨ Key Features
 

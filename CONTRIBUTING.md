@@ -273,7 +273,7 @@ Contributors will be recognized in:
 
 ## 📄 License
 
-By contributing to AD-HDTV, you agree that your contributions will be licensed under the same license as the project (GPLv3).
+By contributing to AD-HDTV, you agree that your contributions will be licensed under the same license as the project (MIT License).
 
 ---
 
