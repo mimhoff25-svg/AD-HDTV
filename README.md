@@ -56,16 +56,13 @@ AD-HDTV is a cross-platform, extensible video grid player and broadcast engine. 
    ```bash
    pip install -r requirements.txt
    ```
-2. Launch the backend:
+
+2. Launch the backend (single entrypoint):
    ```bash
-   python app.py
-   # or
-   ./run_adhdtv.sh
+   python run_server.py
    ```
-3. (Optional) Run remote API server:
-   ```bash
-   python remote_api.py
-   ```
+
+> **Note:** Legacy scripts (run_adhdtv.sh, install_webgridplayer.sh) are now in `legacy/` and not recommended for new deployments.
 
 ---
 

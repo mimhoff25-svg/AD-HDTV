@@ -1,3 +1,11 @@
+
+"""
+AudioDirector: Centralized audio policy for AD-HDTV
+- Only one source is audible at a time (solo mode)
+- All others are muted on select/tune
+- TODO: Wire into engine for actual audio control
+"""
+
 import logging
 from typing import Optional, Callable, Any
 

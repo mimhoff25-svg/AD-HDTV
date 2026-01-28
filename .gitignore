@@ -39,6 +39,9 @@ Thumbs.db
 
 # Existing ignores below (keep for legacy/dev)
 
+# AD-HDTV runtime state
+state/
+
 # Distribution / packaging
 .Python
 build/
