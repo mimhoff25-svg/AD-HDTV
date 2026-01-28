@@ -1,6 +1,29 @@
-# Contributing to WebGridPlayer
 
-Thank you for your interest in contributing to WebGridPlayer! This document provides guidelines and information for contributors.
+# Contributing to AD-HDTV
+
+Thank you for your interest in contributing!
+
+## Branching
+- Use `main` for stable releases.
+- Use `dev` for ongoing development.
+- Feature branches: `feature/<short-description>`
+
+## Commit Messages
+- Use short, imperative messages (e.g., "add Roku client stub").
+
+## No Binaries or Build Folders
+- Do not commit build outputs, binaries, or IDE folders.
+- See .gitignore for details.
+
+## Where to Place New Features
+- Backend/server code: `server/` (or `AD_HDTV/` if not split yet)
+- Android client: `clients/android/`
+- Roku client: `clients/roku/`
+- Docs: `docs/`
+
+---
+
+For questions, open an issue or discussion.
 
 ## 🚀 Quick Start
 

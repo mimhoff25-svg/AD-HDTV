@@ -1,7 +1,43 @@
-# Ignore Python bytecode
+###########################
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+.venv/
+venv/
+
+###########################
+# Node
+node_modules/
+dist/
+
+###########################
+# OS
+.DS_Store
+Thumbs.db
+
+###########################
+# VS Code / IDE
+.vscode/
+.idea/
+*.iml
+
+###########################
+# Android (critical)
+**/.gradle/
+**/build/
+**/.idea/
+**/*.iml
+**/local.properties
+**/.cxx/
+**/.externalNativeBuild/
+**/*.apk
+**/*.aab
+
+###########################
+# Logs
+*.log
+
+# Existing ignores below (keep for legacy/dev)
 
 # Distribution / packaging
 .Python
