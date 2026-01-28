@@ -45,7 +45,7 @@
 - `scripts/` — Install and dev scripts
 - `tests/` — Unit/integration tests
 - `clients/` — Thin frontends (android, roku)
-- `legacy/` — Old scripts and files (WebGridPlayer)
+- `legacy/` — Old scripts and files (not used in AD-HDTV)
 
 ---
 
@@ -61,7 +61,8 @@
    python run_server.py
    ```
 
-> **Note:** Legacy scripts (run_adhdtv.sh, install_webgridplayer.sh) are now in `legacy/` and not recommended for new deployments.
+
+> **Note:** All legacy scripts are now in `legacy/` and not referenced by AD-HDTV. Use only `install_adhdtv.sh` and `run_adhdtv.sh` for setup and running.
 
 ---
 
