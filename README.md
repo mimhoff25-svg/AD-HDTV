@@ -13,8 +13,7 @@
 
 ## What is AD-HDTV?
 
-AD-HDTV is a cross-platform, extensible video grid player and broadcast engine. It enables:
-- Multi-video grid playback (1x1 to 4x4)
+- Multiple video grid playback (1x1 to 4x4)
 - Intelligent web stream extraction
 - Synchronized controls and advanced video features
 - Extensible API for remote control (Roku, Android, web)
@@ -66,13 +65,14 @@ AD-HDTV is a cross-platform, extensible video grid player and broadcast engine. 
 
 ---
 
-## API Endpoints (Planned)
 
-- `GET /status` — Health/status check
-- `POST /control/channel/next` — Next channel
-- `POST /control/channel/prev` — Previous channel
-- `POST /control/channel/set?id=N` — Set channel by ID
-- `POST /control/select?row=X&col=Y` — Select grid cell
+## Remote API Endpoints
+
+- `POST /play` — Start playback (**Implemented**)
+- `POST /pause` — Pause playback (**Implemented**)
+- `POST /channel_up` — Increase channel number (**Implemented**)
+- `POST /channel_down` — Decrease channel number (**Implemented**)
+- `GET /status` — Get current player status (**Implemented**)
 
 See `docs/API.md` for the evolving contract.
 

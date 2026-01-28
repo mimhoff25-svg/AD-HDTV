@@ -3,20 +3,16 @@
 
 This document describes the HTTP API endpoints for remote control of AD-HDTV (ServerX backend).
 
+
 ## Endpoints
 
+- `POST /play` — Start playback (**Implemented**)
+- `POST /pause` — Pause playback (**Implemented**)
+- `POST /channel_up` — Increase channel number (**Implemented**)
+- `POST /channel_down` — Decrease channel number (**Implemented**)
+- `GET /status` — Get current player status (**Implemented**)
 
-- `GET /status` — Returns JSON status/health of the backend (**Implemented**)
-- `GET /events` — Server-sent events stream of state updates (**Prototype**)
-- `POST /control/channel/next` — Switch to next channel (**Implemented**)
-- `POST /control/channel/prev` — Switch to previous channel (**Implemented**)
-- `POST /control/channel/set?id=N` — Set channel by ID (**Implemented**)
-- `POST /control/select?row=X&col=Y` — Select a grid cell (**Implemented**)
-- `POST /control/guide/show` — Show guide (**Implemented**)
-- `POST /control/guide/hide` — Hide guide (**Implemented**)
-- `POST /control/audio/solo?id=SOURCE` — Solo audio source (**Implemented, engine wiring TODO**)
-- `POST /control/audio/mute?value=1|0` — Mute/unmute audio (**Implemented, engine wiring TODO**)
-- `GET /guide?hours=2&start=<iso_optional>` — Returns a fake EPG grid (**Implemented**)
+Other endpoints are planned or in progress. See remote_api.py for current implementation.
 
 ---
 
