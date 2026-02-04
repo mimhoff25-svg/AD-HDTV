@@ -16,6 +16,7 @@ import importlib.util
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
+import time
 from urllib.parse import urljoin, urlparse
 from concurrent.futures import ThreadPoolExecutor
 from guide import GuideDialog, LogoResolver, build_sample_data
@@ -1802,10 +1803,19 @@ class VideoPlayer(QFrame):
             return
         
         channel_url = channel.get('url', '')
-        if channel_url and not _is_playable_stream(channel_url, channel.get('url_type', '')):
-            # Discard stale/non-playable cached entries (e.g., browser fallback cached during outage)
+        cached_type = channel.get('url_type', '')
+        channel_expiry_valid = True
+        if channel_url and not _is_playable_stream(channel_url, cached_type):
             channel_url = ''
+            cached_type = ''
             channel.pop('url', None)
+            channel.pop('url_type', None)
+        if channel_url and not main_window._is_cached_stream_valid(channel_num):
+            channel_expiry_valid = False
+            channel_url = ''
+            cached_type = ''
+            for k in ('url', 'url_type', 'url_expiry'):
+                channel.pop(k, None)
         channel_title = channel.get('title', str(channel_num))
         source_url = channel.get('source_url')
         
@@ -1818,7 +1828,7 @@ class VideoPlayer(QFrame):
                 main_window.status_bar.showMessage(f"Loaded channel {channel_num} into Player #{self.display_id}")
                 self.refresh_channel_badge(channel_num, channel)
 
-        if channel_url:
+        if channel_url and channel_expiry_valid:
             load_with_url(channel_url)
         elif source_url:
             # Extract fresh token/URL in background and then load
@@ -1834,9 +1844,7 @@ class VideoPlayer(QFrame):
                         stream_type = candidate.get('type', '') if candidate else ''
 
                         if new_url and _is_playable_stream(new_url, stream_type):
-                            channel['url'] = new_url  # cache in memory
-                            if stream_type:
-                                channel['url_type'] = stream_type
+                            main_window._cache_channel_stream(channel_num, new_url, stream_type)
                             load_with_url(new_url)
                         elif candidate and WEBENGINE_AVAILABLE:
                             # Fall back to browser mode if that's all we have
@@ -4157,7 +4165,9 @@ class ADHDTVPlayer(QMainWindow):
             for num in nums:
                 ch = self.channels.get(num, {})
                 # Skip if already cached or no source URL
-                if ch.get('url') or not ch.get('source_url'):
+                if ch.get('source_url') and ch.get('url') and self._is_cached_stream_valid(num):
+                    continue
+                if not ch.get('source_url'):
                     continue
                 to_extract.append(num)
             
@@ -4190,10 +4200,7 @@ class ADHDTVPlayer(QMainWindow):
                             url = candidate.get('url')
                             stype = candidate.get('type', '')
                             if url and _is_playable_stream(url, stype):
-                                # Cache in memory for faster tune
-                                self.channels[num]['url'] = url
-                                if stype:
-                                    self.channels[num]['url_type'] = stype
+                                self._cache_channel_stream(num, url, stype)
                                 self.logger.debug(f"Cached token for channel {num}")
                     except FutureTimeoutError:
                         self.logger.warning(f"Extraction timeout for channel {num}")
@@ -4721,6 +4728,45 @@ class ADHDTVPlayer(QMainWindow):
         except Exception as e:
             self.logger.error("Failed to save channels: %s", e)
 
+    # ------------ Channel stream caching helpers -------------
+    def _parse_url_expiry(self, url: str) -> Optional[int]:
+        """Extract expires= epoch from tokenized URLs when present."""
+        if not url or 'expires=' not in url:
+            return None
+        try:
+            from urllib.parse import parse_qs
+            qs = parse_qs(urlparse(url).query)
+            exp = qs.get('expires')
+            if exp:
+                return int(exp[0])
+        except Exception:
+            return None
+        return None
+
+    def _cache_channel_stream(self, num: int, url: str, stream_type: str = ""):
+        """Cache stream URL with optional type and expiry for quick reuse."""
+        if num not in self.channels or not url:
+            return
+        self.channels[num]['url'] = url
+        if stream_type:
+            self.channels[num]['url_type'] = stream_type
+        exp = self._parse_url_expiry(url)
+        if exp:
+            self.channels[num]['url_expiry'] = exp
+
+    def _is_cached_stream_valid(self, num: int, buffer_seconds: int = 30) -> bool:
+        """Return True if cached stream exists and has not expired (with buffer)."""
+        ch = self.channels.get(num, {})
+        url = ch.get('url')
+        if not url:
+            return False
+        exp = ch.get('url_expiry')
+        if exp:
+            now = int(time.time())
+            if now >= exp - buffer_seconds:
+                return False
+        return True
+
     def update_all_player_channel_lists(self):
         """Update channel dropdown lists in all players."""
         for player in self.players:
@@ -4983,10 +5029,12 @@ class ADHDTVPlayer(QMainWindow):
         current_token_url = channel.get('url')  # Ephemeral; may be missing or expired
         cached_type = channel.get('url_type', '')
 
-        # Discard cached entries that are not directly playable (browser fallbacks)
-        if current_token_url and not _is_playable_stream(current_token_url, cached_type):
+        # Discard cached entries that are not directly playable (browser fallbacks or expired)
+        if current_token_url and (not _is_playable_stream(current_token_url, cached_type) or not self._is_cached_stream_valid(number)):
             current_token_url = None
             channel.pop('url', None)
+            channel.pop('url_type', None)
+            channel.pop('url_expiry', None)
 
         display_title = f"Ch {number}: {title}" if title else f"Ch {number}"
 
@@ -5024,9 +5072,7 @@ class ADHDTVPlayer(QMainWindow):
                                 self.active_player.current_channel_number = number
                             self.active_player.load_media(new_url, title=display_title, source_url=source_url)
                             self.refresh_audio_states()
-                            self.channels[number]['url'] = new_url
-                            if stream_type:
-                                self.channels[number]['url_type'] = stream_type
+                            self._cache_channel_stream(number, new_url, stream_type)
                             self.status_bar.showMessage(f"✓ Tuned to channel {number}: {title}")
                         elif candidate and WEBENGINE_AVAILABLE:
                             # Use browser mode fallback when only a webpage is available
@@ -5075,7 +5121,7 @@ class ADHDTVPlayer(QMainWindow):
             for ch_num in to_prefetch:
                 ch = self.channels.get(ch_num, {})
                 # Skip if already cached or no source URL
-                if ch.get('url') or not ch.get('source_url'):
+                if (ch.get('url') and self._is_cached_stream_valid(ch_num)) or not ch.get('source_url'):
                     continue
                 
                 src = ch.get('source_url')
@@ -5090,9 +5136,7 @@ class ADHDTVPlayer(QMainWindow):
                                 url = candidate.get('url')
                                 stype = candidate.get('type', '')
                                 if url and _is_playable_stream(url, stype):
-                                    self.channels[n]['url'] = url
-                                    if stype:
-                                        self.channels[n]['url_type'] = stype
+                                    self._cache_channel_stream(n, url, stype)
                                     self.logger.debug(f"Prefetched token for channel {n}")
                         except Exception as e:
                             self.logger.debug(f"Prefetch failed for channel {n}: {e}")
@@ -5452,9 +5496,7 @@ class ADHDTVPlayer(QMainWindow):
                         new_url = candidate.get('url') if candidate else None
                         stream_type = candidate.get('type', '') if candidate else ''
                         if new_url and _is_playable_stream(new_url, stream_type):
-                            self.channels[num]['url'] = new_url
-                            if stream_type:
-                                self.channels[num]['url_type'] = stream_type
+                            self._cache_channel_stream(num, new_url, stream_type)
                             if candidate and candidate.get('title'):
                                 self.channels[num]['title'] = candidate['title']
                             logger.info(f"Refreshed token for Ch {num}: {self.channels[num]['title']}")
@@ -6460,7 +6502,7 @@ class ADHDTVPlayer(QMainWindow):
             # Find channels without cached tokens (need extraction)
             to_refresh = []
             for num, ch in self.channels.items():
-                if not ch.get('url') and ch.get('source_url'):
+                if (not ch.get('url') or not self._is_cached_stream_valid(num)) and ch.get('source_url'):
                     to_refresh.append((num, ch))
             
             if not to_refresh:
@@ -6480,9 +6522,7 @@ class ADHDTVPlayer(QMainWindow):
                                     url = candidate.get('url')
                                     stype = candidate.get('type', '')
                                     if url and _is_playable_stream(url, stype):
-                                        self.channels[n]['url'] = url
-                                        if stype:
-                                            self.channels[n]['url_type'] = stype
+                                        self._cache_channel_stream(n, url, stype)
                                         self.logger.debug(f"Idle refresh cached token for channel {n}")
                             except Exception as e:
                                 self.logger.debug(f"Idle refresh error for channel {n}: {e}")
