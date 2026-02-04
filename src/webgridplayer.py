@@ -395,6 +395,7 @@ class VideoStreamExtractor:
         self.domain_timeouts = {
             'tvpass.org': 5,      # tvpass pages are JS-heavy; keep tight timeout
         }
+        self.fast_token_timeout = 8
 
     def _extract_thetvapp_stream(self, soup: BeautifulSoup, page_url: str) -> List[Dict[str, str]]:
         """Extract TheTVApp tokenized stream URLs if present."""
@@ -442,6 +443,39 @@ class VideoStreamExtractor:
             log_error_with_context(error_msg, f"Token URL: {token_url}, Stream name: {stream_name}", e)
 
         return streams
+
+    def _fast_thetvapp_token(self, page_url: str) -> List[Dict[str, str]]:
+        """Attempt a direct /token/<slug> lookup without loading the page."""
+        parsed = urlparse(page_url)
+        if 'thetvapp.to' not in parsed.netloc:
+            return []
+        parts = parsed.path.strip('/').split('/')
+        if len(parts) < 2 or parts[0] != 'tv':
+            return []
+        slug = parts[1]
+        # Expect ending in -live-stream
+        if not slug.endswith('-live-stream'):
+            return []
+        stream_name = slug.replace('-live-stream', '')
+        # Skip complex multi-hyphen station names to avoid false misses
+        if stream_name.count('-') > 2:
+            return []
+        token_url = f"https://thetvapp.to/token/{stream_name.replace('-', '').upper()}"
+        try:
+            resp = self.session.get(token_url, headers={'Referer': page_url}, timeout=self.fast_token_timeout)
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+            stream_url = data.get('url') if isinstance(data, dict) else None
+            if not stream_url:
+                return []
+            return [{
+                'url': stream_url,
+                'type': 'application/x-mpegURL',
+                'title': f'TVApp HLS: {stream_name}'
+            }]
+        except Exception:
+            return []
     
     def extract_streams(self, url: str) -> List[Dict[str, str]]:
         """Extract video streams from a web page.
@@ -457,6 +491,11 @@ class VideoStreamExtractor:
                     'type': 'browser',
                     'title': f'🌐 Browser Mode - {urlparse(url).netloc}'
                 }]
+
+            # Fast path for TheTVApp tokenized streams (avoid full page fetch)
+            fast_tvapp = self._fast_thetvapp_token(url)
+            if fast_tvapp:
+                return fast_tvapp
 
             # Domain-specific timeout/attempt policy
             netloc = urlparse(url).netloc
