@@ -395,6 +395,7 @@ class VideoStreamExtractor:
         self.retry_backoff = 0.8  # seconds
         self.domain_timeouts = {
             'tvpass.org': 5,      # tvpass pages are JS-heavy; keep tight timeout
+            'thetvapp.to': 6,     # avoid long hangs on TheTVApp connect
         }
         self.fast_token_timeout = 8
 
@@ -501,7 +502,7 @@ class VideoStreamExtractor:
             # Domain-specific timeout/attempt policy
             netloc = urlparse(url).netloc
             base_timeout = self.domain_timeouts.get(netloc, 10)
-            max_attempts = 1 if netloc == 'tvpass.org' else self.max_retries
+            max_attempts = 1 if netloc in ('tvpass.org', 'thetvapp.to') else self.max_retries
 
             # Keep request timeout lean to avoid slow tunes; retries handled per feature
             for attempt in range(max_attempts):
@@ -1811,11 +1812,16 @@ class VideoPlayer(QFrame):
             channel.pop('url', None)
             channel.pop('url_type', None)
         if channel_url and not main_window._is_cached_stream_valid(channel_num):
-            channel_expiry_valid = False
-            channel_url = ''
-            cached_type = ''
-            for k in ('url', 'url_type', 'url_expiry'):
-                channel.pop(k, None)
+            # Allow stale-but-usable to start fast, refresh in background
+            if main_window._is_cached_stream_stale_but_usable(channel_num):
+                channel_expiry_valid = True
+                main_window._refresh_channel_in_background(channel_num)
+            else:
+                channel_expiry_valid = False
+                channel_url = ''
+                cached_type = ''
+                for k in ('url', 'url_type', 'url_expiry'):
+                    channel.pop(k, None)
         channel_title = channel.get('title', str(channel_num))
         source_url = channel.get('source_url')
         
@@ -2311,9 +2317,21 @@ class VideoPlayer(QFrame):
             return
         try:
             track_id = self._first_subtitle_id()
-            if track_id is None:
-                return
-            self.media_player.video_set_spu(track_id)
+            if track_id is not None:
+                self.media_player.video_set_spu(track_id)
+        except Exception:
+            pass
+
+    def _ensure_captions_active(self):
+        """Keep captions on if user enabled them and VLC turned them off."""
+        if not self.captions_enabled or not self.media_player:
+            return
+        try:
+            current = self.media_player.video_get_spu()
+            if current == -1:
+                track_id = self._first_subtitle_id()
+                if track_id is not None:
+                    self.media_player.video_set_spu(track_id)
         except Exception:
             pass
 
@@ -2325,20 +2343,21 @@ class VideoPlayer(QFrame):
             current = self.media_player.video_get_spu()
             if current == -1:
                 track_id = self._first_subtitle_id()
-                if track_id is None:
-                    self.status_label.setText("Ⓧ")
-                    mw = self.get_main_window()
-                    if mw:
-                        mw.status_bar.showMessage(f"Player {self.display_id}: No captions available")
-                    return
-                self.media_player.video_set_spu(track_id)
+                # Even if no track yet, keep intent so we can auto-apply when available
                 self.captions_enabled = True
                 self.cc_button.setText("CC")
                 self._apply_cc_style()
-                self.status_label.setText("CC")
-                mw = self.get_main_window()
-                if mw:
-                    mw.status_bar.showMessage(f"Player {self.display_id}: Captions ON (track {track_id})")
+                if track_id is not None:
+                    self.media_player.video_set_spu(track_id)
+                    self.status_label.setText("CC")
+                    mw = self.get_main_window()
+                    if mw:
+                        mw.status_bar.showMessage(f"Player {self.display_id}: Captions ON (track {track_id})")
+                else:
+                    self.status_label.setText("CC?")
+                    mw = self.get_main_window()
+                    if mw:
+                        mw.status_bar.showMessage(f"Player {self.display_id}: No captions available (will keep trying)")
             else:
                 self.media_player.video_set_spu(-1)
                 self.captions_enabled = False
@@ -2601,6 +2620,9 @@ class VideoPlayer(QFrame):
                             self.refresh_media()
                 else:
                     self.blank_check_failures = 0
+            
+            # Keep captions applied if user wants them
+            self._ensure_captions_active()
             
             # Track if we were playing
             if state == vlc.State.Playing:
@@ -4767,6 +4789,42 @@ class ADHDTVPlayer(QMainWindow):
                 return False
         return True
 
+    def _is_cached_stream_stale_but_usable(self, num: int, grace_seconds: int = 180) -> bool:
+        """Allow using slightly expired tokens to reduce tune latency."""
+        ch = self.channels.get(num, {})
+        url = ch.get('url')
+        if not url:
+            return False
+        exp = ch.get('url_expiry')
+        if not exp:
+            return False
+        now = int(time.time())
+        return (exp <= now < exp + grace_seconds)
+
+    def _refresh_channel_in_background(self, num: int):
+        """Refresh token for a specific channel without interrupting playback."""
+        ch = self.channels.get(num, {})
+        src = ch.get('source_url')
+        if not src:
+            return
+        future = self.thread_pool.submit(self.extractor.extract_streams, src)
+
+        def on_done():
+            if future.done():
+                try:
+                    candidate = _select_best_stream(future.result())
+                    new_url = candidate.get('url') if candidate else None
+                    stype = candidate.get('type', '') if candidate else ''
+                    if new_url and _is_playable_stream(new_url, stype):
+                        self._cache_channel_stream(num, new_url, stype)
+                        self.logger.debug(f"Background refresh updated channel {num}")
+                except Exception as e:
+                    self.logger.debug(f"Background refresh failed for channel {num}: {e}")
+            else:
+                QTimer.singleShot(100, on_done)
+
+        QTimer.singleShot(100, on_done)
+
     def update_all_player_channel_lists(self):
         """Update channel dropdown lists in all players."""
         for player in self.players:
@@ -5029,12 +5087,17 @@ class ADHDTVPlayer(QMainWindow):
         current_token_url = channel.get('url')  # Ephemeral; may be missing or expired
         cached_type = channel.get('url_type', '')
 
-        # Discard cached entries that are not directly playable (browser fallbacks or expired)
-        if current_token_url and (not _is_playable_stream(current_token_url, cached_type) or not self._is_cached_stream_valid(number)):
+        # Discard invalid, but allow slightly stale tokens for fast start
+        if current_token_url and not _is_playable_stream(current_token_url, cached_type):
             current_token_url = None
-            channel.pop('url', None)
-            channel.pop('url_type', None)
-            channel.pop('url_expiry', None)
+        elif current_token_url and not self._is_cached_stream_valid(number):
+            if self._is_cached_stream_stale_but_usable(number):
+                # Use stale token to start fast; refresh in background
+                self._refresh_channel_in_background(number)
+            else:
+                current_token_url = None
+                for k in ('url', 'url_type', 'url_expiry'):
+                    channel.pop(k, None)
 
         display_title = f"Ch {number}: {title}" if title else f"Ch {number}"
 
