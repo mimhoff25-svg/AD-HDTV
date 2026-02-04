@@ -279,6 +279,39 @@ KNOWN_ERRORS = {
     }
 }
 
+_STREAM_EXTS = ('.m3u8', '.mp4', '.webm', '.ogg', '.avi', '.mov', '.flv', '.mkv', '.ts')
+
+
+def _is_playable_stream(url: str, stream_type: str = "") -> bool:
+    """Return True when the URL looks directly playable by VLC (not a browser fallback)."""
+    if not url:
+        return False
+    stype = (stream_type or "").lower()
+    # Explicit browser fallback should never be treated as playable
+    if stype == "browser":
+        return False
+    url_lower = url.lower()
+    if any(url_lower.endswith(ext) for ext in _STREAM_EXTS):
+        return True
+    if '.m3u8' in url_lower:
+        return True
+    playable_markers = [
+        'hls', 'm3u8', 'jwplayer', 'videojs', 'html5',
+        'iframe_hls', 'cdn_stream', 'iframe_video', 'thetvapp_token',
+        'application/x-mpegurl'
+    ]
+    return any(marker in stype for marker in playable_markers)
+
+
+def _select_best_stream(streams: List[Dict[str, str]]) -> Optional[Dict[str, str]]:
+    """Pick the best playable stream from a list, falling back to the first entry."""
+    if not streams:
+        return None
+    for stream in streams:
+        if _is_playable_stream(stream.get('url', ''), stream.get('type', '')):
+            return stream
+    return streams[0]
+
 def classify_error(error_message: str) -> Dict[str, str]:
     """Classify error message against known patterns."""
     import re
@@ -357,6 +390,11 @@ class VideoStreamExtractor:
             'Accept-Language': 'en-US,en;q=0.5',
             'Referer': 'https://www.google.com/'
         })
+        self.max_retries = 2
+        self.retry_backoff = 0.8  # seconds
+        self.domain_timeouts = {
+            'tvpass.org': 5,      # tvpass pages are JS-heavy; keep tight timeout
+        }
 
     def _extract_thetvapp_stream(self, soup: BeautifulSoup, page_url: str) -> List[Dict[str, str]]:
         """Extract TheTVApp tokenized stream URLs if present."""
@@ -372,19 +410,33 @@ class VideoStreamExtractor:
 
         token_url = urljoin(page_url, f"/token/{stream_name}")
         try:
-            token_resp = self.session.get(token_url, headers={'Referer': page_url}, timeout=10)
-            token_resp.raise_for_status()
-            data = token_resp.json()
-            stream_url = data.get('url') if isinstance(data, dict) else None
-            if not stream_url:
-                self.logger.debug("m3u8 URL not found in the response.")
-                return streams
+            # Retry logic for slow TheTVApp servers
+            max_retries = self.max_retries
+            for attempt in range(max_retries):
+                try:
+                    token_resp = self.session.get(token_url, headers={'Referer': page_url}, timeout=10)
+                    if token_resp.status_code >= 500 and attempt < max_retries - 1:
+                        time.sleep(self.retry_backoff * (attempt + 1))
+                        continue
+                    token_resp.raise_for_status()
+                    data = token_resp.json()
+                    stream_url = data.get('url') if isinstance(data, dict) else None
+                    if not stream_url:
+                        self.logger.debug("m3u8 URL not found in the response.")
+                        return streams
 
-            streams.append({
-                'url': stream_url,
-                'type': 'application/x-mpegURL',
-                'title': f'TVApp HLS: {stream_name}'
-            })
+                    streams.append({
+                        'url': stream_url,
+                        'type': 'application/x-mpegURL',
+                        'title': f'TVApp HLS: {stream_name}'
+                    })
+                    return streams
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        self.logger.debug(f"TheTVApp token fetch attempt {attempt + 1} failed, retrying...")
+                        continue
+                    else:
+                        raise
         except Exception as e:
             error_msg = f"Token stream fetch failed from {token_url}"
             log_error_with_context(error_msg, f"Token URL: {token_url}, Stream name: {stream_name}", e)
@@ -396,9 +448,29 @@ class VideoStreamExtractor:
 
         Always returns at least a browser-mode fallback entry for JavaScript-heavy sites.
         """
+        response = None
         try:
-            response = self.session.get(url, timeout=10)
-            response.raise_for_status()
+            # tvpass.org: treat as browser-only to avoid slow/JS-heavy extraction
+            if 'tvpass.org' in urlparse(url).netloc:
+                return [{
+                    'url': url,
+                    'type': 'browser',
+                    'title': f'🌐 Browser Mode - {urlparse(url).netloc}'
+                }]
+
+            # Domain-specific timeout/attempt policy
+            netloc = urlparse(url).netloc
+            base_timeout = self.domain_timeouts.get(netloc, 10)
+            max_attempts = 1 if netloc == 'tvpass.org' else self.max_retries
+
+            # Keep request timeout lean to avoid slow tunes; retries handled per feature
+            for attempt in range(max_attempts):
+                response = self.session.get(url, timeout=base_timeout, allow_redirects=True)
+                if response.status_code >= 500 and attempt < max_attempts - 1:
+                    time.sleep(self.retry_backoff * (attempt + 1))
+                    continue
+                response.raise_for_status()
+                break
             
             soup = BeautifulSoup(response.content, 'html.parser')
             streams = []
@@ -421,6 +493,14 @@ class VideoStreamExtractor:
 
             # Method 0: TheTVApp tokenized stream (jwplayer setup)
             streams.extend(self._extract_thetvapp_stream(soup, url))
+
+            # tvpass pages are JS-app heavy; after primary token check, bail early to browser
+            if netloc == 'tvpass.org' and not streams:
+                return [{
+                    'url': url,
+                    'type': 'browser',
+                    'title': f'🌐 Browser Mode - {urlparse(url).netloc}'
+                }]
 
             # Method 1: Find iframes with video sources and try to extract from them
             iframes = soup.find_all('iframe')
@@ -625,8 +705,10 @@ class VideoStreamExtractor:
             return unique_streams
             
         except Exception as e:
+            status_code = getattr(response, 'status_code', 'unknown') if response else 'connection_failed'
             error_msg = f"Stream extraction failed from {url}"
-            log_error_with_context(error_msg, f"URL: {url}, Response status: {getattr(response, 'status_code', 'unknown')}", e)
+            log_error_with_context(error_msg, f"URL: {url}, Status: {status_code}", e)
+            # Always return browser mode fallback so channels don't fail completely
             return [{
                 'url': url,
                 'type': 'browser',
@@ -660,9 +742,12 @@ class VideoPlayer(QFrame):
         self.refresh_attempt_count = 0
         self.last_refresh_time = 0
         
-        # Token refresh tracking (disabled by default; refresh only on no-signal/blank)
-        self.token_refresh_enabled = False
+        # Token refresh tracking (enabled by default for tokenized streams)
+        self.token_refresh_enabled = True
         self.token_refresh_timer = None
+        # Subtitles
+        self.captions_enabled = False
+        self._apply_cc_style()
 
         # Auto-recovery tracking
         self.auto_recovery_enabled = True  # Enable by default
@@ -727,7 +812,8 @@ class VideoPlayer(QFrame):
                 border-radius: 8px;
             }
         """)
-        self.setMinimumSize(200, 150)  # Smaller minimum for better scaling
+        # Keep tiles flexible so the grid can shrink/grow smoothly during window drags
+        self.setMinimumSize(160, 120)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Enable context menu for this player
@@ -857,6 +943,29 @@ class VideoPlayer(QFrame):
                     stop:0 #3a3a3a, stop:1 #2a2a2a);
             }
         """
+        # Reuse styles later
+        self.button_style_default = button_style
+        self.button_style_cc_on = """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #5ac8fa, stop:1 #3da9e0);
+                color: #0d1b2a;
+                border: 1px solid #2d8ccf;
+                border-radius: 6px;
+                font-size: 11pt;
+                font-weight: bold;
+                padding: 2px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #6ad5ff, stop:1 #4cbcf0);
+                border: 1px solid #3097d6;
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #3498db, stop:1 #2c82c1);
+            }
+        """
         
         # Mode toggle button
         self.mode_button = QPushButton("🎬")
@@ -874,6 +983,15 @@ class VideoPlayer(QFrame):
         self.mute_button.setToolTip("Toggle mute")
         self.is_muted = False
         info_layout.addWidget(self.mute_button)
+
+        # Captions (CC) button
+        self.cc_button = QPushButton("CC")
+        self.cc_button.setFixedSize(32, 24)
+        self.cc_button.setStyleSheet(self.button_style_default)
+        self.cc_button.clicked.connect(self.toggle_captions)
+        self.cc_button.setToolTip("Toggle closed captions (if available)")
+        self.captions_enabled = False
+        info_layout.addWidget(self.cc_button)
 
         # Refresh button
         self.refresh_button = QPushButton("🔄")
@@ -1185,29 +1303,22 @@ class VideoPlayer(QFrame):
         def handle_extraction():
             if future.done():
                 try:
-                    streams = future.result()
-                    if streams:
-                        candidate = None
-                        # Prefer HLS/m3u8 streams
-                        for s in streams:
-                            u = s.get('url', '')
-                            t = s.get('type', '')
-                            if u and (u.lower().endswith('.m3u8') or 'hls' in t.lower() or 'videojs' in t.lower()):
-                                candidate = s
-                                break
-                        if not candidate:
-                            candidate = streams[0]
-                        new_url = candidate.get('url')
-                        title = candidate.get('title', self.get_display_text())
-                        if new_url:
-                            self.log_event('manual_reextract_update')
-                            self.load_media(new_url, title=title, source_url=self.source_url)
-                            self.status_label.setText("✅ Updated")
-                            main_window.status_bar.showMessage(
-                                f"Player #{self.player_id + 1}: Loaded fresh stream from source", 3000
-                            )
-                        else:
-                            self.status_label.setText("❌ No URL")
+                    candidate = _select_best_stream(future.result())
+                    new_url = candidate.get('url') if candidate else None
+                    stream_type = candidate.get('type', '') if candidate else ''
+                    title = candidate.get('title', self.get_display_text()) if candidate else self.get_display_text()
+
+                    if new_url and _is_playable_stream(new_url, stream_type):
+                        self.log_event('manual_reextract_update')
+                        self.load_media(new_url, title=title, source_url=self.source_url)
+                        self.status_label.setText("✅ Updated")
+                        main_window.status_bar.showMessage(
+                            f"Player #{self.player_id + 1}: Loaded fresh stream from source", 3000
+                        )
+                    elif new_url and WEBENGINE_AVAILABLE:
+                        main_window.set_active_player(self)
+                        main_window.add_url_to_browser_mode(self.source_url or new_url)
+                        self.status_label.setText("🌐 Browser")
                     else:
                         self.status_label.setText("❌ No streams")
                         self.log_event('manual_reextract_empty')
@@ -1652,6 +1763,10 @@ class VideoPlayer(QFrame):
             return
         
         channel_url = channel.get('url', '')
+        if channel_url and not _is_playable_stream(channel_url, channel.get('url_type', '')):
+            # Discard stale/non-playable cached entries (e.g., browser fallback cached during outage)
+            channel_url = ''
+            channel.pop('url', None)
         channel_title = channel.get('title', str(channel_num))
         source_url = channel.get('source_url')
         
@@ -1668,28 +1783,27 @@ class VideoPlayer(QFrame):
             load_with_url(channel_url)
         elif source_url:
             # Extract fresh token/URL in background and then load
+            self.status_label.setText("🔍 Loading...")
             future = main_window.thread_pool.submit(main_window.extractor.extract_streams, source_url)
 
             def on_done():
                 if future.done():
                     try:
                         streams = future.result()
-                        if streams:
-                            candidate = None
-                            for s in streams:
-                                u = s.get('url', '')
-                                t = s.get('type', '')
-                                if u and (u.lower().endswith('.m3u8') or 'hls' in (t or '').lower() or 'videojs' in (t or '').lower()):
-                                    candidate = s
-                                    break
-                            if not candidate and streams:
-                                candidate = streams[0]
-                            new_url = candidate.get('url') if candidate else None
-                            if new_url:
-                                channel['url'] = new_url  # cache in memory
-                                load_with_url(new_url)
-                            else:
-                                QMessageBox.information(self, "No Streams", f"No streams found for Channel {channel_num}.")
+                        candidate = _select_best_stream(streams) if streams else None
+                        new_url = candidate.get('url') if candidate else None
+                        stream_type = candidate.get('type', '') if candidate else ''
+
+                        if new_url and _is_playable_stream(new_url, stream_type):
+                            channel['url'] = new_url  # cache in memory
+                            if stream_type:
+                                channel['url_type'] = stream_type
+                            load_with_url(new_url)
+                        elif candidate and WEBENGINE_AVAILABLE:
+                            # Fall back to browser mode if that's all we have
+                            main_window.set_active_player(self)
+                            main_window.add_url_to_browser_mode(source_url or new_url or self.source_url)
+                            self.status_label.setText("🌐 Browser")
                         else:
                             QMessageBox.information(self, "No Streams", f"No streams found for Channel {channel_num}.")
                     finally:
@@ -1773,6 +1887,7 @@ class VideoPlayer(QFrame):
             # Set up basic event manager
             self.event_manager = self.media_player.event_manager()
             self.event_manager.event_attach(vlc.EventType.MediaPlayerMediaChanged, self._on_media_changed)
+            self.event_manager.event_attach(vlc.EventType.MediaPlayerPlaying, self._on_media_playing)
             
             # Set up monitoring timer for auto-recovery
             self.monitor_timer = QTimer(self)
@@ -1840,6 +1955,12 @@ class VideoPlayer(QFrame):
             self.auto_recovery_count = 0
             self.was_playing = False
             self.consecutive_error_count = 0
+            # Reset captions state on new media load
+            # Keep user intent: if captions were enabled, try to re-enable on the new stream.
+            # We keep the flag and reapply after media is ready.
+            if not hasattr(self, 'captions_enabled'):
+                self.captions_enabled = False
+            self._apply_cc_style()
             
             # Log the media loading attempt
             media_type = "file" if not url.startswith(('http://', 'https://')) else "stream"
@@ -1853,15 +1974,34 @@ class VideoPlayer(QFrame):
                 if '.m3u8' in url.lower():
                     # Use a modern browser UA and include referrer when available
                     self.media.add_option(':http-user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36')
-                    if self.source_url:
+                    
+                    # For TheTVApp streams, use TheTVApp domain as referer
+                    if 'thetvapp.to' in url:
+                        self.media.add_option(':http-referrer=https://thetvapp.to')
+                        # Additional options for token-based streams
+                        self.media.add_option(':network-caching=2000')    # High buffering for slow servers
+                        self.media.add_option(':live-caching=1000')       # High live cache for token expiry
+                        self.media.add_option(':http-reconnect')
+                        self.media.add_option(':http-continuous-stream')
+                        self.media.add_option(':http-timeout=60000')      # 60s timeout for slow e4 server
+                        self.media.add_option(':stream-filter=httplive')  # Use HLS stream filter
+                        logger.info("Applied TheTVApp optimizations for: %s", url[:50])
+                    elif self.source_url:
                         self.media.add_option(f':http-referrer={self.source_url}')
-                    # Balanced caching for multi-video performance (not too aggressive)
-                    self.media.add_option(':network-caching=400')     # Moderate network cache
-                    self.media.add_option(':live-caching=200')        # Lower live cache
-                    self.media.add_option(':http-reconnect')
-                    # Try hardware acceleration if available
+                        # Standard HLS caching
+                        self.media.add_option(':network-caching=500')     # Slightly higher for token validation
+                        self.media.add_option(':live-caching=300')        # Higher live cache for token streams
+                        self.media.add_option(':http-reconnect')
+                        self.media.add_option(':http-continuous-stream')
+                        logger.info("Applied HLS optimizations for: %s", url[:50])
+                    else:
+                        # Generic HLS
+                        self.media.add_option(':network-caching=500')
+                        self.media.add_option(':live-caching=300')
+                        self.media.add_option(':http-reconnect')
+                    
+                    # Common options for all HLS
                     self.media.add_option(':avcodec-hw=any')
-                    logger.info("Applied HLS optimizations for: %s", url[:50])
             else:
                 self.media = self.vlc_instance.media_new_path(url)
             
@@ -1899,12 +2039,18 @@ class VideoPlayer(QFrame):
                     self.refresh_channel_badge(self.current_channel_number, ch)
             
             # Auto-play after a short delay to ensure media is ready (reduced for faster start)
-            QTimer.singleShot(200, self.play)
+            QTimer.singleShot(100, self.play)
             # After initial load, verify playback and attempt re-extraction if needed
-            QTimer.singleShot(3000, self._check_playback_and_retry)
-            
+            QTimer.singleShot(2000, self._check_playback_and_retry)
+            # If captions were enabled, attempt to enable first available track shortly after load
+            if self.captions_enabled:
+                QTimer.singleShot(400, self._enable_preferred_subtitle)
+
             logger.info("Loading media in VLC player %s: %s", self.player_id, url)
             # If eligible, start token refresh monitoring
+            if 'thetvapp.to' in url:
+                # Force token refresh enabled for TheTVApp streams (they expire quickly)
+                self.token_refresh_enabled = True
             self._maybe_start_token_refresh()
             return True
             
@@ -2013,6 +2159,7 @@ class VideoPlayer(QFrame):
                 if hasattr(self, 'event_manager') and self.event_manager:
                     try:
                         self.event_manager.event_detach(vlc.EventType.MediaPlayerMediaChanged)
+                        self.event_manager.event_detach(vlc.EventType.MediaPlayerPlaying)
                         self.event_manager.event_detach(vlc.EventType.MediaPlayerTimeChanged)
                         self.event_manager.event_detach(vlc.EventType.MediaPlayerPositionChanged)
                     except:
@@ -2075,6 +2222,90 @@ class VideoPlayer(QFrame):
         self._apply_audio_policy()
 
         self.mute_button.setToolTip("Unmute" if self.is_muted else "Mute")
+
+    # ---- Captions / Subtitles ----
+    def _first_subtitle_id(self) -> Optional[int]:
+        """Return the first available subtitle track id, or None if none."""
+        if not self.media_player:
+            return None
+        try:
+            desc = self.media_player.video_get_spu_description()
+            if not desc:
+                return None
+            # desc is list of (id, name)
+            for track_id, _name in desc:
+                if track_id >= 0:  # libVLC: -1 off, -2 default
+                    return track_id
+        except Exception:
+            return None
+        return None
+
+    def _apply_cc_style(self):
+        """Apply button style reflecting caption state."""
+        if hasattr(self, 'cc_button'):
+            self.cc_button.setStyleSheet(
+                self.button_style_cc_on if getattr(self, 'captions_enabled', False) else self.button_style_default
+            )
+
+    def _on_media_playing(self, event=None):
+        """When playback starts, re-apply preferred subtitle track if enabled."""
+        if not self.captions_enabled or not self.media_player:
+            return
+        try:
+            track_id = self._first_subtitle_id()
+            if track_id is not None:
+                self.media_player.video_set_spu(track_id)
+        except Exception:
+            pass
+
+    def _enable_preferred_subtitle(self):
+        """Enable first available subtitle track if captions are desired."""
+        if not self.captions_enabled or not self.media_player:
+            return
+        try:
+            track_id = self._first_subtitle_id()
+            if track_id is None:
+                return
+            self.media_player.video_set_spu(track_id)
+        except Exception:
+            pass
+
+    def toggle_captions(self):
+        """Toggle closed captions/subtitles for this player."""
+        if not self.media_player:
+            return
+        try:
+            current = self.media_player.video_get_spu()
+            if current == -1:
+                track_id = self._first_subtitle_id()
+                if track_id is None:
+                    self.status_label.setText("Ⓧ")
+                    mw = self.get_main_window()
+                    if mw:
+                        mw.status_bar.showMessage(f"Player {self.display_id}: No captions available")
+                    return
+                self.media_player.video_set_spu(track_id)
+                self.captions_enabled = True
+                self.cc_button.setText("CC")
+                self._apply_cc_style()
+                self.status_label.setText("CC")
+                mw = self.get_main_window()
+                if mw:
+                    mw.status_bar.showMessage(f"Player {self.display_id}: Captions ON (track {track_id})")
+            else:
+                self.media_player.video_set_spu(-1)
+                self.captions_enabled = False
+                self.cc_button.setText("CC")
+                self._apply_cc_style()
+                self.status_label.setText("⭕")
+                mw = self.get_main_window()
+                if mw:
+                    mw.status_bar.showMessage(f"Player {self.display_id}: Captions OFF")
+        except Exception:
+            self.status_label.setText("Ⓧ")
+            mw = self.get_main_window()
+            if mw:
+                mw.status_bar.showMessage(f"Player {self.display_id}: Caption toggle failed")
     
     def toggle_solo(self):
         """Toggle solo mode for this player (mutes others AND scales to fill grid)."""
@@ -2442,8 +2673,8 @@ class VideoPlayer(QFrame):
             if not self.token_refresh_timer:
                 self.token_refresh_timer = QTimer(self)
                 self.token_refresh_timer.timeout.connect(self._token_refresh_tick)
-                # Default interval: 5 minutes
-                self.token_refresh_timer.start(5 * 60 * 1000)
+                # Default interval: 2 minutes for faster token updates
+                self.token_refresh_timer.start(2 * 60 * 1000)
         except Exception as e:
             logger = logging.getLogger(LOGGER_NAME)
             logger.error(f"Player {self.player_id}: Failed to start token refresh: {e}")
@@ -2472,28 +2703,16 @@ class VideoPlayer(QFrame):
             def handle_refresh():
                 if future.done():
                     try:
-                        streams = future.result()
-                        if streams:
-                            # Prefer HLS/m3u8 streams
-                            candidate = None
-                            for s in streams:
-                                u = s.get('url', '')
-                                t = s.get('type', '')
-                                if u and (u.lower().endswith('.m3u8') or 'hls' in t.lower() or 'videojs' in t.lower()):
-                                    candidate = s
-                                    break
-                            # Fallback to first stream
-                            if not candidate:
-                                candidate = streams[0]
+                        candidate = _select_best_stream(future.result())
+                        new_url = candidate.get('url') if candidate else None
+                        stream_type = candidate.get('type', '') if candidate else ''
 
-                            new_url = candidate.get('url')
-                            if new_url and new_url != self.current_url:
-                                # Update stream seamlessly
-                                title = candidate.get('title', self.get_display_text())
-                                logger.info(f"Player {self.player_id}: Token refresh updating URL")
-                                self.load_media(new_url, title=title, source_url=self.source_url)
-                                self.status_label.setText("🔁 Token refreshed")
-                        else:
+                        if new_url and _is_playable_stream(new_url, stream_type) and new_url != self.current_url:
+                            title = candidate.get('title', self.get_display_text()) if candidate else self.get_display_text()
+                            logger.info(f"Player {self.player_id}: Token refresh updating URL")
+                            self.load_media(new_url, title=title, source_url=self.source_url)
+                            self.status_label.setText("🔁 Token refreshed")
+                        elif candidate is None:
                             logger.warning(f"Player {self.player_id}: Token refresh found no streams")
                     except Exception as e:
                         logger.error(f"Player {self.player_id}: Token refresh error: {e}")
@@ -2551,6 +2770,8 @@ class VideoPlayer(QFrame):
             self.mode_button.setVisible(visible)
         if hasattr(self, 'mute_button'):
             self.mute_button.setVisible(visible)
+        if hasattr(self, 'cc_button'):
+            self.cc_button.setVisible(visible)
         if hasattr(self, 'refresh_button'):
             self.refresh_button.setVisible(visible)
         if hasattr(self, 'status_label'):
@@ -2663,17 +2884,21 @@ class ADHDTVPlayer(QMainWindow):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # Force grid and players to expand on show (maximize/fullscreen)
-        if hasattr(self, 'grid_container') and self.centralWidget():
-            self.grid_container.resize(self.centralWidget().size())
-            self.grid_container.updateGeometry()
-            if hasattr(self, 'grid_layout'):
-                self.grid_layout.update()
-            for player in getattr(self, 'players', []):
-                player.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-                player.updateGeometry()
-        self.updateGeometry()
-        self.repaint()
+        # On first show, just refresh tile minimums based on the current layout size.
+        self._update_tile_min_sizes()
+    
+    def resizeEvent(self, event):
+        """Keep the grid filling the window while the user drags to resize."""
+        super().resizeEvent(event)
+        # Use timer to ensure layout has updated before recalculating sizes
+        QTimer.singleShot(0, self._update_tile_min_sizes)
+
+    def changeEvent(self, event):
+        """Handle window state changes like maximize/minimize."""
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.WindowStateChange:
+            # Update tile sizes when window state changes (maximize/minimize/restore)
+            QTimer.singleShot(0, self._update_tile_min_sizes)
 
     def __init__(self, app_state: Optional[Any] = None, config: Optional[Dict[str, Any]] = None):
         super().__init__()
@@ -2681,6 +2906,7 @@ class ADHDTVPlayer(QMainWindow):
         self.config = config or {}
         self.logger = logging.getLogger(LOGGER_NAME)
         self.action_logger = logging.getLogger(ACTION_LOGGER_NAME)
+        self._prev_window_state = None
 
         window_geometry = self.config.get("window_geometry", {})
         self.window_title = self.config.get(
@@ -2702,8 +2928,9 @@ class ADHDTVPlayer(QMainWindow):
         self.active_player: Optional[VideoPlayer] = None
         self.current_volume = int(self.config.get("default_volume", 70))
         self.extractor = VideoStreamExtractor()
-        # Increase thread pool for better 8-video performance
-        self.thread_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix='webgrid')
+        # Thread pool for extraction tasks (keep moderate to avoid server throttling)
+        pool_workers = int(os.environ.get("ADHDTV_THREAD_WORKERS", 6))
+        self.thread_pool = ThreadPoolExecutor(max_workers=pool_workers, thread_name_prefix='webgrid')
         self._prewarm_thread = None
         self.control_panel_visible = bool(self.config.get("control_panel_visible", True))
         self.control_panel = None
@@ -2781,9 +3008,27 @@ class ADHDTVPlayer(QMainWindow):
         self._load_favorites_from_disk()
         self._load_playlists_from_disk()
         self._load_channels_from_disk()
-        # Prewarm ALL channel tokens in parallel for fast switching (limit=None means all)
+        # Prewarm channel tokens; default: ALL channels for fastest tuning (override via env/config).
+        raw_limit = os.environ.get("ADHDTV_PREWARM_LIMIT", self.config.get("channels", {}).get("prewarm_limit", None))
         try:
-            self.prewarm_channels(limit=None)
+            self.prewarm_limit = int(raw_limit)
+            if self.prewarm_limit <= 0:
+                self.prewarm_limit = None  # treat <=0 as all
+        except Exception:
+            # Fallbacks: strings like "all" mean no limit
+            if str(raw_limit).lower() in ("all", "none", "unlimited"):
+                self.prewarm_limit = None
+            else:
+                self.prewarm_limit = None
+
+        env_prewarm_conc = os.environ.get("ADHDTV_PREWARM_CONCURRENCY")
+        if env_prewarm_conc and env_prewarm_conc.isdigit():
+            self.prewarm_concurrency = int(env_prewarm_conc)
+        else:
+            self.prewarm_concurrency = int(self.config.get("channels", {}).get("prewarm_concurrency", 6))
+        # Prewarm channels for fast switching
+        try:
+            self.prewarm_channels(limit=self.prewarm_limit)
         except Exception as _:
             pass
         self.create_grid()
@@ -2993,10 +3238,16 @@ class ADHDTVPlayer(QMainWindow):
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
         self.grid_container.setLayout(self.grid_layout)
         main_layout.addWidget(self.grid_container)
+        # Make sure the grid gets nearly all vertical space when resizing
+        main_layout.setStretch(0, 0)  # control panel
+        main_layout.setStretch(1, 0)  # toggle button
+        main_layout.setStretch(2, 1)  # grid container
         
         # Status bar
         self.status_bar = self.statusBar()
         self.status_bar.showMessage("Ready")    
+        # Allow resizing from bottom-right via native size grip
+        self.status_bar.setSizeGripEnabled(True)
 
         # Arrow-key navigation for moving the highlighted/active player.
         # Use shortcuts so Up/Down work even when focus is inside child widgets.
@@ -3614,6 +3865,51 @@ class ADHDTVPlayer(QMainWindow):
         
         return panel
     
+    def _apply_player_size_constraints(self, player: 'VideoPlayer'):
+        """Adjust per-tile minimum size based on current grid to improve auto-scaling while resizing."""
+        rows, cols = self.grid_size
+        base_w, base_h = 320, 240
+        min_w = max(120, base_w // max(cols, 1))
+        min_h = max(90, base_h // max(rows, 1))
+        player.setMinimumSize(min_w, min_h)
+        player.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+    def _update_tile_min_sizes(self):
+        """Recalculate tile minimum sizes based on current viewport to allow horizontal as well as vertical shrink/grow."""
+        if not getattr(self, "players", None) or not getattr(self, "grid_container", None):
+            return
+        rows, cols = self.grid_size
+        if rows <= 0 or cols <= 0:
+            return
+
+        spacing_x = max(self.grid_layout.horizontalSpacing() or 0, 0)
+        spacing_y = max(self.grid_layout.verticalSpacing() or 0, 0)
+        margins = self.grid_layout.contentsMargins()
+
+        available_w = max(
+            0,
+            self.grid_container.width()
+            - margins.left() - margins.right()
+            - spacing_x * (cols - 1),
+        )
+        available_h = max(
+            0,
+            self.grid_container.height()
+            - margins.top() - margins.bottom()
+            - spacing_y * (rows - 1),
+        )
+
+        per_w = max(96, available_w // max(cols, 1))
+        per_h = max(72, available_h // max(rows, 1))
+
+        for player in self.players:
+            player.setMinimumSize(per_w, per_h)
+            player.updateGeometry()
+        
+        # Force layout recalculation
+        self.grid_layout.invalidate()
+        self.grid_container.update()
+    
     def create_grid(self):
         """Create the video player grid."""
         try:
@@ -3672,6 +3968,7 @@ class ADHDTVPlayer(QMainWindow):
                         player = VideoPlayer(player_id, self)
                         # Verify player was created successfully
                         if player and hasattr(player, 'video_widget'):
+                            self._apply_player_size_constraints(player)
                             self.players.append(player)
                             self.grid_layout.addWidget(player, row, col)
                             self.logger.debug(f"Successfully created player {player_id}")
@@ -3715,6 +4012,9 @@ class ADHDTVPlayer(QMainWindow):
                 self.grid_layout.setRowStretch(i, 1)
             for i in range(cols):
                 self.grid_layout.setColumnStretch(i, 1)
+
+            # Recompute minimums against the current viewport so tiles can shrink/grow both horizontally and vertically.
+            self._update_tile_min_sizes()
 
             # Restore previous player states where possible (position-stable)
             for idx, state in enumerate(old_states):
@@ -3828,50 +4128,42 @@ class ADHDTVPlayer(QMainWindow):
             update_status(f"⏳ Prewarming {len(to_extract)} channel(s)...")
             self.logger.info(f"Starting prewarm for channels: {to_extract}")
             
-            # Submit all extraction tasks in parallel
+            # Use a bounded pool to avoid hammering upstream sites
+            max_workers = max(1, int(getattr(self, "prewarm_concurrency", 4)))
             futures = {}
-            for num in to_extract:
-                ch = self.channels.get(num, {})
-                src = ch.get('source_url')
-                if src:
-                    future = self.thread_pool.submit(self.extractor.extract_streams, src)
-                    futures[num] = future
-            
-            # Monitor completion with timeout per extraction
             completed = 0
-            from concurrent.futures import as_completed, TimeoutError as FutureTimeoutError
-            
-            try:
-                for future in as_completed(futures.values(), timeout=30):  # 30 sec total timeout
-                    for num, f in futures.items():
-                        if f is future:
-                            try:
-                                streams = f.result(timeout=5)  # 5 sec per extraction
-                                if streams:
-                                    candidate = None
-                                    for s in streams:
-                                        u = s.get('url', '')
-                                        t = s.get('type', '')
-                                        if u and (u.lower().endswith('.m3u8') or 'hls' in (t or '').lower() or 'videojs' in (t or '').lower()):
-                                            candidate = s
-                                            break
-                                    if not candidate and streams:
-                                        candidate = streams[0]
-                                    if candidate and candidate.get('url'):
-                                        # Cache in memory for faster tune
-                                        self.channels[num]['url'] = candidate.get('url')
-                                        self.logger.debug(f"Cached token for channel {num}")
-                            except FutureTimeoutError:
-                                self.logger.warning(f"Extraction timeout for channel {num}")
-                            except Exception as e:
-                                self.logger.debug(f"Prewarm extraction error for channel {num}: {e}")
-                            finally:
-                                completed += 1
-                                progress = f"{completed}/{len(to_extract)}"
-                                update_status(f"⏳ Prewarming channels: {progress}")
-                            break
-            except FutureTimeoutError:
-                self.logger.warning(f"Prewarm total timeout - completed {completed}/{len(to_extract)}")
+            from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
+            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='prewarm') as prewarm_pool:
+                for num in to_extract:
+                    ch = self.channels.get(num, {})
+                    src = ch.get('source_url')
+                    if src:
+                        futures[num] = prewarm_pool.submit(self.extractor.extract_streams, src)
+
+                for future in as_completed(futures.values()):
+                    # Identify which channel this future belongs to
+                    num = next((n for n, f in futures.items() if f is future), None)
+                    if num is None:
+                        continue
+                    try:
+                        candidate = _select_best_stream(future.result(timeout=6))  # 6 sec per extraction
+                        if candidate:
+                            url = candidate.get('url')
+                            stype = candidate.get('type', '')
+                            if url and _is_playable_stream(url, stype):
+                                # Cache in memory for faster tune
+                                self.channels[num]['url'] = url
+                                if stype:
+                                    self.channels[num]['url_type'] = stype
+                                self.logger.debug(f"Cached token for channel {num}")
+                    except FutureTimeoutError:
+                        self.logger.warning(f"Extraction timeout for channel {num}")
+                    except Exception as e:
+                        self.logger.debug(f"Prewarm extraction error for channel {num}: {e}")
+                    finally:
+                        completed += 1
+                        progress = f"{completed}/{len(to_extract)}"
+                        update_status(f"⏳ Prewarming channels: {progress}")
             
             if completed > 0:
                 update_status(f"✓ Prewarmed {completed}/{len(to_extract)} channels for fast switching")
@@ -4354,6 +4646,8 @@ class ADHDTVPlayer(QMainWindow):
                             if 'url' in v:
                                 # Keep in-memory only; will not be persisted going forward
                                 entry['url'] = v.get('url', '')
+                            if 'url_type' in v:
+                                entry['url_type'] = v.get('url_type', '')
                             normalized[num] = entry
                     self.channels = normalized
                     # Load lineup label if stored
@@ -4545,6 +4839,7 @@ class ADHDTVPlayer(QMainWindow):
         self._player_fullscreen_active = True
         self._player_fullscreen_restore = {
             "was_fullscreen": self.isFullScreen(),
+            "window_state": self.windowState(),
             "control_panel_visible": self.control_panel_visible,
         }
 
@@ -4578,23 +4873,42 @@ class ADHDTVPlayer(QMainWindow):
         self.set_overlay_visibility(True)
 
         if not restore.get("was_fullscreen", False):
-            self.showNormal()
+            prev_state = restore.get("window_state")
+            if prev_state is not None:
+                self.setWindowState(prev_state)
+            else:
+                self.showNormal()
 
         self._player_fullscreen_active = False
         self._player_fullscreen_restore = {}
         if hasattr(self, "status_bar") and self.status_bar:
             self.status_bar.showMessage("Exited video fullscreen")
 
+    def set_overlay_visibility(self, visible: bool):
+        """Hide/show UI overlays in fullscreen mode."""
+        if hasattr(self, 'control_panel') and self.control_panel:
+            self.control_panel.setVisible(visible)
+        if hasattr(self, 'toggle_button') and self.toggle_button:
+            self.toggle_button.setVisible(visible)
+        if hasattr(self, 'status_bar') and self.status_bar:
+            self.status_bar.setVisible(visible)
+
     def toggle_fullscreen_mode(self):
         """Toggle fullscreen for the main window."""
         if self.isFullScreen():
-            self.showNormal()
+            prev_state = getattr(self, "_prev_window_state", None)
+            if prev_state is not None:
+                self.setWindowState(prev_state)
+            else:
+                self.showNormal()
             self.set_overlay_visibility(True)
             self.status_bar.showMessage("Exited fullscreen")
         else:
             # If video fullscreen is active, exit it first to avoid conflicting states
             if self._player_fullscreen_active:
                 self.exit_player_fullscreen()
+            # Remember prior state (maximized vs normal) so we can restore it
+            self._prev_window_state = self.windowState()
             self.showFullScreen()
             self.set_overlay_visibility(False)
             self.status_bar.showMessage("Entered fullscreen (Press Esc to exit)")
@@ -4628,6 +4942,12 @@ class ADHDTVPlayer(QMainWindow):
         title = channel.get('title', str(number))
         source_url = channel.get('source_url')
         current_token_url = channel.get('url')  # Ephemeral; may be missing or expired
+        cached_type = channel.get('url_type', '')
+
+        # Discard cached entries that are not directly playable (browser fallbacks)
+        if current_token_url and not _is_playable_stream(current_token_url, cached_type):
+            current_token_url = None
+            channel.pop('url', None)
 
         display_title = f"Ch {number}: {title}" if title else f"Ch {number}"
 
@@ -4649,41 +4969,40 @@ class ADHDTVPlayer(QMainWindow):
         if source_url:
             self.logger.info(f"Tuning to channel {number} via source: {title} - {source_url}")
             self.action_logger.info(f"Tuned to Channel {number}: {title}")
+            self.status_bar.showMessage(f"Loading channel {number}: {title}...")
 
             future = self.thread_pool.submit(self.extractor.extract_streams, source_url)
 
             def on_done():
                 if future.done():
                     try:
-                        streams = future.result()
-                        if streams:
-                            candidate = None
-                            for s in streams:
-                                u = s.get('url', '')
-                                t = s.get('type', '')
-                                if u and (u.lower().endswith('.m3u8') or 'hls' in (t or '').lower() or 'videojs' in (t or '').lower()):
-                                    candidate = s
-                                    break
-                            if not candidate:
-                                candidate = streams[0]
-                            new_url = candidate.get('url')
-                            if self.active_player and new_url:
-                                # Track tuned channel number for stable display
-                                if hasattr(self.active_player, 'current_channel_number'):
-                                    self.active_player.current_channel_number = number
-                                self.active_player.load_media(new_url, title=display_title, source_url=source_url)
-                                self.refresh_audio_states()
-                                # Update ephemeral token URL in memory for reuse
-                                self.channels[number]['url'] = new_url
-                                self.status_bar.showMessage(f"Tuned to channel {number}: {title}")
-                            else:
-                                # Fallback
-                                self.add_url_to_grid(new_url)
+                        candidate = _select_best_stream(future.result())
+                        new_url = candidate.get('url') if candidate else None
+                        stream_type = candidate.get('type', '') if candidate else ''
+
+                        if self.active_player and new_url and _is_playable_stream(new_url, stream_type):
+                            if hasattr(self.active_player, 'current_channel_number'):
+                                self.active_player.current_channel_number = number
+                            self.active_player.load_media(new_url, title=display_title, source_url=source_url)
+                            self.refresh_audio_states()
+                            self.channels[number]['url'] = new_url
+                            if stream_type:
+                                self.channels[number]['url_type'] = stream_type
+                            self.status_bar.showMessage(f"✓ Tuned to channel {number}: {title}")
+                        elif candidate and WEBENGINE_AVAILABLE:
+                            # Use browser mode fallback when only a webpage is available
+                            self.set_active_player(self.active_player or self.players[0])
+                            self.add_url_to_browser_mode(source_url or new_url)
+                            self.status_bar.showMessage(f"🌐 Browser mode for Channel {number}")
+                        elif new_url:
+                            # Last resort: try to load even if not clearly playable
+                            self.add_url_to_grid(new_url)
                         else:
-                            QMessageBox.information(self, "No Streams", f"No streams found for Channel {number}.")
-                            self.status_bar.showMessage(f"No streams for Channel {number}")
+                            self.status_bar.showMessage(f"No playable streams for Channel {number}")
+                            self.logger.warning(f"No streams found for Channel {number}")
                     except Exception as e:
-                        QMessageBox.warning(self, "Extraction Error", f"Failed to extract streams for Channel {number}: {e}")
+                        self.logger.error(f"Channel {number} extraction error: {e}")
+                        self.status_bar.showMessage(f"Error loading Channel {number}: {type(e).__name__}")
                     finally:
                         return
                 else:
@@ -4727,19 +5046,14 @@ class ADHDTVPlayer(QMainWindow):
                 def on_prefetch_done(n=ch_num, f=future):
                     if f.done():
                         try:
-                            streams = f.result(timeout=3)  # 3 sec timeout
-                            if streams:
-                                candidate = None
-                                for s in streams:
-                                    u = s.get('url', '')
-                                    t = s.get('type', '')
-                                    if u and (u.lower().endswith('.m3u8') or 'hls' in (t or '').lower() or 'videojs' in (t or '').lower()):
-                                        candidate = s
-                                        break
-                                if not candidate and streams:
-                                    candidate = streams[0]
-                                if candidate and candidate.get('url'):
-                                    self.channels[n]['url'] = candidate.get('url')
+                            candidate = _select_best_stream(f.result(timeout=3))  # 3 sec timeout
+                            if candidate:
+                                url = candidate.get('url')
+                                stype = candidate.get('type', '')
+                                if url and _is_playable_stream(url, stype):
+                                    self.channels[n]['url'] = url
+                                    if stype:
+                                        self.channels[n]['url_type'] = stype
                                     self.logger.debug(f"Prefetched token for channel {n}")
                         except Exception as e:
                             self.logger.debug(f"Prefetch failed for channel {n}: {e}")
@@ -4916,6 +5230,8 @@ class ADHDTVPlayer(QMainWindow):
                 # Preserve existing tokenized url if any
                 if 'url' in self.channels[num]:
                     entry['url'] = self.channels[num]['url']
+                if 'url_type' in self.channels[num]:
+                    entry['url_type'] = self.channels[num]['url_type']
             return entry
 
         def add_channel():
@@ -5093,23 +5409,16 @@ class ADHDTVPlayer(QMainWindow):
                 if future.done():
                     try:
                         streams = future.result()
-                        if streams:
-                            candidate = None
-                            for s in streams:
-                                u = s.get('url', '')
-                                t = s.get('type', '')
-                                if u and (u.lower().endswith('.m3u8') or 'hls' in (t or '').lower() or 'videojs' in (t or '').lower()):
-                                    candidate = s
-                                    break
-                            if not candidate:
-                                candidate = streams[0]
-                            new_url = candidate.get('url')
-                            if new_url:
-                                self.channels[num]['url'] = new_url
-                                # Optional: update title if provided
-                                if candidate.get('title'):
-                                    self.channels[num]['title'] = candidate['title']
-                                logger.info(f"Refreshed token for Ch {num}: {self.channels[num]['title']}")
+                        candidate = _select_best_stream(streams)
+                        new_url = candidate.get('url') if candidate else None
+                        stream_type = candidate.get('type', '') if candidate else ''
+                        if new_url and _is_playable_stream(new_url, stream_type):
+                            self.channels[num]['url'] = new_url
+                            if stream_type:
+                                self.channels[num]['url_type'] = stream_type
+                            if candidate and candidate.get('title'):
+                                self.channels[num]['title'] = candidate['title']
+                            logger.info(f"Refreshed token for Ch {num}: {self.channels[num]['title']}")
                         else:
                             logger.warning(f"No streams for Ch {num} during refresh")
                     except Exception as e:
@@ -6127,19 +6436,14 @@ class ADHDTVPlayer(QMainWindow):
                     def on_idle_refresh_done(n=num, f=future):
                         if f.done():
                             try:
-                                streams = f.result(timeout=5)
-                                if streams:
-                                    candidate = None
-                                    for s in streams:
-                                        u = s.get('url', '')
-                                        t = s.get('type', '')
-                                        if u and (u.lower().endswith('.m3u8') or 'hls' in (t or '').lower() or 'videojs' in (t or '').lower()):
-                                            candidate = s
-                                            break
-                                    if not candidate and streams:
-                                        candidate = streams[0]
-                                    if candidate and candidate.get('url'):
-                                        self.channels[n]['url'] = candidate.get('url')
+                                candidate = _select_best_stream(f.result(timeout=5))
+                                if candidate:
+                                    url = candidate.get('url')
+                                    stype = candidate.get('type', '')
+                                    if url and _is_playable_stream(url, stype):
+                                        self.channels[n]['url'] = url
+                                        if stype:
+                                            self.channels[n]['url_type'] = stype
                                         self.logger.debug(f"Idle refresh cached token for channel {n}")
                             except Exception as e:
                                 self.logger.debug(f"Idle refresh error for channel {n}: {e}")
@@ -6186,6 +6490,17 @@ def main(app_state: Optional[Any] = None, config: Optional[Dict[str, Any]] = Non
     app_version = config.get("version", "0.0.0")
     setup_logging(app_name=app_name, log_level=config.get("logging", {}).get("level", "INFO"))
 
+    # Enable HiDPI-aware auto scaling so the UI resizes smoothly while dragging between displays
+    try:
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling, True)
+        QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps, True)
+    except AttributeError:
+        try:
+            QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+            QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+        except Exception:
+            pass
+
     app = QApplication(sys.argv)
     app.setApplicationName(app_name)
     app.setApplicationVersion(app_version)
@@ -6205,27 +6520,14 @@ def main(app_state: Optional[Any] = None, config: Optional[Dict[str, Any]] = Non
     window = WebGridPlayer(app_state=app_state, config=config)
     if window.display_mode == "fullscreen":
         window.showFullScreen()
-        # Force grid to fill window
-        if hasattr(window, 'grid_container') and window.centralWidget():
-            window.grid_container.resize(window.centralWidget().size())
-            window.grid_container.updateGeometry()
-            if hasattr(window, 'grid_layout'):
-                window.grid_layout.update()
     elif window.display_mode == "maximized":
         window.showMaximized()
-        # Force grid to fill window
-        if hasattr(window, 'grid_container') and window.centralWidget():
-            window.grid_container.resize(window.centralWidget().size())
-            window.grid_container.updateGeometry()
-            if hasattr(window, 'grid_layout'):
-                window.grid_layout.update()
     else:
-        window.show()
-        if hasattr(window, 'grid_container') and window.centralWidget():
-            window.grid_container.resize(window.centralWidget().size())
-            window.grid_container.updateGeometry()
-            if hasattr(window, 'grid_layout'):
-                window.grid_layout.update()
+        # Prefer a screen-filling start unless user explicitly asks for windowed mode
+        if os.environ.get("ADHDTV_WINDOWED") == "1":
+            window.show()
+        else:
+            window.showMaximized()
     
     return app.exec()
 
