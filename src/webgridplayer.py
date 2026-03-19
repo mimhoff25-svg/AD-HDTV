@@ -1476,11 +1476,9 @@ class VideoPlayer(QFrame):
                     self.log_event('manual_reextract_error', error=str(e))
                 finally:
                     self.is_reextracting = False
-            else:
-                QTimer.singleShot(100, handle_extraction)
         
         self.is_reextracting = True
-        QTimer.singleShot(100, handle_extraction)
+        future.add_done_callback(lambda _: QTimer.singleShot(0, handle_extraction))
     
     def save_to_channel(self):
         """Save current URL to a channel number."""
@@ -1971,10 +1969,8 @@ class VideoPlayer(QFrame):
                             QMessageBox.information(self, "No Streams", f"No streams found for Channel {channel_num}.")
                     finally:
                         return
-                else:
-                    QTimer.singleShot(100, on_done)
 
-            QTimer.singleShot(100, on_done)
+            future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
         else:
             QMessageBox.warning(self, "Channel Missing URL", f"Channel {channel_num} has no URL or source page.")
     
@@ -2660,12 +2656,13 @@ class VideoPlayer(QFrame):
                     if future.done():
                         try:
                             streams = future.result()
-                            if streams:
-                                # Auto-load first stream
-                                first_stream = streams[0]
+                            candidate = _select_best_stream(streams) if streams else None
+                            new_url = candidate.get('url') if candidate else None
+                            stream_type = candidate.get('type', '') if candidate else ''
+                            if candidate and new_url and _is_playable_stream(new_url, stream_type):
                                 self.load_media(
-                                    first_stream['url'], 
-                                    title=first_stream.get('title', current_title),
+                                    new_url,
+                                    title=candidate.get('title', current_title),
                                     source_url=self.source_url
                                 )
                                 self.status_label.setText("🔄 Re-extracted")
@@ -2692,10 +2689,8 @@ class VideoPlayer(QFrame):
                             logger.error(f"Player {self.player_id}: Smart refresh extraction error: {e}")
                         finally:
                             self.is_reextracting = False
-                    else:
-                        QTimer.singleShot(100, handle_extraction)
                 
-                QTimer.singleShot(100, handle_extraction)
+                future.add_done_callback(lambda _: QTimer.singleShot(0, handle_extraction))
         else:
             # No source URL available, just try regular refresh again
             self.load_media(self.current_url, title=self.get_display_text())
@@ -2857,12 +2852,13 @@ class VideoPlayer(QFrame):
             if future.done():
                 try:
                     streams = future.result()
-                    if streams:
-                        # Auto-load first stream
-                        first_stream = streams[0]
+                    candidate = _select_best_stream(streams) if streams else None
+                    new_url = candidate.get('url') if candidate else None
+                    stream_type = candidate.get('type', '') if candidate else ''
+                    if candidate and new_url and _is_playable_stream(new_url, stream_type):
                         self.load_media(
-                            first_stream['url'], 
-                            title=first_stream.get('title', current_title),
+                            new_url,
+                            title=candidate.get('title', current_title),
                             source_url=self.source_url
                         )
                         self.status_label.setText("✅ Recovered")
@@ -2894,11 +2890,9 @@ class VideoPlayer(QFrame):
                     logger.error(f"Player {self.player_id}: Auto-recovery error: {e}")
                 finally:
                     self.is_reextracting = False
-            else:
-                QTimer.singleShot(100, handle_auto_recovery)
         
         self.is_reextracting = True
-        QTimer.singleShot(100, handle_auto_recovery)
+        future.add_done_callback(lambda _: QTimer.singleShot(0, handle_auto_recovery))
 
     def _maybe_start_token_refresh(self):
         """Start a periodic token refresh if conditions suggest tokenized HLS."""
@@ -2964,10 +2958,8 @@ class VideoPlayer(QFrame):
                         logger.error(f"Player {self.player_id}: Token refresh error: {e}")
                     finally:
                         self.is_token_refreshing = False
-                else:
-                    QTimer.singleShot(100, handle_refresh)
 
-            QTimer.singleShot(100, handle_refresh)
+            future.add_done_callback(lambda _: QTimer.singleShot(0, handle_refresh))
         except Exception as e:
             logger = logging.getLogger(LOGGER_NAME)
             logger.error(f"Player {self.player_id}: Token refresh tick failed: {e}")
@@ -5027,10 +5019,8 @@ class ADHDTVPlayer(QMainWindow):
                         self.logger.debug(f"Background refresh updated channel {num}")
                 except Exception as e:
                     self.logger.debug(f"Background refresh failed for channel {num}: {e}")
-            else:
-                QTimer.singleShot(100, on_done)
 
-        QTimer.singleShot(100, on_done)
+        future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
 
     def update_all_player_channel_lists(self):
         """Update channel dropdown lists in all players."""
@@ -5369,10 +5359,8 @@ class ADHDTVPlayer(QMainWindow):
                         self.status_bar.showMessage(f"Error loading Channel {number}: {type(e).__name__}")
                     finally:
                         return
-                else:
-                    QTimer.singleShot(100, on_done)
 
-            QTimer.singleShot(100, on_done)
+            future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
             
             # Prefetch next channel in background for smooth up/down navigation
             self._prefetch_next_channel(number)
@@ -5791,10 +5779,8 @@ class ADHDTVPlayer(QMainWindow):
                     finally:
                         idx += 1
                         QTimer.singleShot(10, process_next)
-                else:
-                    QTimer.singleShot(100, on_done)
-            
-            QTimer.singleShot(100, on_done)
+
+            future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
         
         process_next()
     
@@ -5871,10 +5857,8 @@ class ADHDTVPlayer(QMainWindow):
                 except Exception as e:
                     log_error_with_context("Extraction Error", f"URL: {url}", e)
                     self.load_url_directly(url)
-            else:
-                QTimer.singleShot(100, check_completion)
-        
-        QTimer.singleShot(100, check_completion)
+
+        future.add_done_callback(lambda _: QTimer.singleShot(0, check_completion))
     
     def fetch_web_streams(self):
         """Fetch video streams from a web page."""
@@ -5909,10 +5893,8 @@ class ADHDTVPlayer(QMainWindow):
                     except Exception as e:
                         log_error_with_context("Extraction Error", f"URL: {url}", e)
                         self.load_url_directly(url)
-                else:
-                    QTimer.singleShot(100, check_completion)
-            
-            QTimer.singleShot(100, check_completion)
+
+            future.add_done_callback(lambda _: QTimer.singleShot(0, check_completion))
     
     def show_stream_selection_dialog(self, streams: List[Dict[str, str]], source_url: str = None):
         """Show dialog to select which streams to add to the grid."""
