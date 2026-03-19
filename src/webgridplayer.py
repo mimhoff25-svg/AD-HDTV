@@ -104,6 +104,9 @@ except ImportError:
 
 _QWEBENGINEVIEW_CLASS = None
 TOKEN_CACHE_SCHEMA_VERSION = 3
+_THETVAPP_REQ_LOCK = threading.Lock()
+_THETVAPP_LAST_REQ_TS = 0.0
+_THETVAPP_MIN_INTERVAL_S = float(os.environ.get("ADHDTV_THETVAPP_MIN_INTERVAL", "0.75"))
 
 
 def get_webengine_view_class():
@@ -459,6 +462,16 @@ class VideoStreamExtractor:
         self.fast_token_timeout = 20  # increased timeout
         self.request_delay = 1.0  # Add delay between requests to avoid rate limiting
 
+    def _throttle_thetvapp(self):
+        """Global pacing across all worker threads to reduce TheTVApp 503 responses."""
+        global _THETVAPP_LAST_REQ_TS
+        with _THETVAPP_REQ_LOCK:
+            now = time.monotonic()
+            wait = _THETVAPP_MIN_INTERVAL_S - (now - _THETVAPP_LAST_REQ_TS)
+            if wait > 0:
+                time.sleep(wait)
+            _THETVAPP_LAST_REQ_TS = time.monotonic()
+
     def _extract_thetvapp_stream(self, soup: BeautifulSoup, page_url: str) -> List[Dict[str, str]]:
         """Extract TheTVApp tokenized stream URLs if present."""
         streams = []
@@ -494,6 +507,7 @@ class VideoStreamExtractor:
                     # Add delay between token requests
                     if attempt > 0:
                         time.sleep(self.request_delay)
+                    self._throttle_thetvapp()
                     token_resp = self.session.get(token_url, headers=token_headers, timeout=20)
                     if token_resp.status_code >= 500 and attempt < max_retries - 1:
                         time.sleep(self.retry_backoff * (attempt + 1))
@@ -551,6 +565,8 @@ class VideoStreamExtractor:
                     # Add delay between requests to avoid rate limiting
                     if attempt > 0:
                         time.sleep(self.request_delay)
+                    if netloc == 'thetvapp.to':
+                        self._throttle_thetvapp()
                     response = self.session.get(url, timeout=base_timeout, allow_redirects=True)
                     if response.status_code >= 500 and attempt < max_attempts - 1:
                         time.sleep(self.retry_backoff * (attempt + 1))
@@ -3078,6 +3094,8 @@ class ADHDTVPlayer(QMainWindow):
         self._prewarm_thread = None
         self._prefetch_pending = set()
         self._idle_refresh_pending = set()
+        self._extraction_futures = {}
+        self._extraction_futures_lock = threading.Lock()
         self._tune_request_id = 0
         self.control_panel_visible = bool(self.config.get("control_panel_visible", True))
         self.control_panel = None
@@ -3188,7 +3206,23 @@ class ADHDTVPlayer(QMainWindow):
         if not url:
             return self.thread_pool.submit(lambda: [])
 
-        return self.thread_pool.submit(_extract_streams_worker, url)
+        # De-duplicate in-flight extraction requests for the same source URL.
+        # Rapid channel surfing can otherwise submit the same URL repeatedly.
+        with self._extraction_futures_lock:
+            existing = self._extraction_futures.get(url)
+            if existing and not existing.done():
+                return existing
+
+            future = self.thread_pool.submit(_extract_streams_worker, url)
+            self._extraction_futures[url] = future
+
+            def _clear_inflight(_):
+                with self._extraction_futures_lock:
+                    if self._extraction_futures.get(url) is future:
+                        self._extraction_futures.pop(url, None)
+
+            future.add_done_callback(_clear_inflight)
+            return future
 
     def _monitor_performance(self):
         """Monitor performance metrics for 8-video optimization."""
