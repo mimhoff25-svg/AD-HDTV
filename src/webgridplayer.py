@@ -522,57 +522,6 @@ class VideoStreamExtractor:
 
         return streams
 
-    def _fast_thetvapp_token(self, page_url: str) -> List[Dict[str, str]]:
-        """Attempt a direct /token/<slug> lookup without loading the page."""
-        parsed = urlparse(page_url)
-        if 'thetvapp.to' not in parsed.netloc:
-            return []
-        parts = parsed.path.strip('/').split('/')
-        if len(parts) < 2 or parts[0] != 'tv':
-            return []
-        slug = parts[1]
-        # Expect ending in -live-stream
-        if not slug.endswith('-live-stream'):
-            return []
-        stream_name = slug.replace('-live-stream', '')
-        # Skip complex multi-hyphen station names to avoid false misses
-        if stream_name.count('-') > 2:
-            return []
-        token_url = f"https://thetvapp.to/token/{stream_name.replace('-', '').upper()}"
-        _fast_token_headers = {
-            'Referer': page_url,
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-origin',
-        }
-        # Retry token fetch on timeout
-        for attempt in range(3):
-            try:
-                # Add delay between fast token requests
-                if attempt > 0:
-                    time.sleep(self.request_delay)
-                resp = self.session.get(token_url, headers=_fast_token_headers, timeout=self.fast_token_timeout)
-                if resp.status_code != 200:
-                    return []
-                data = resp.json()
-                stream_url = data.get('url') if isinstance(data, dict) else None
-                if not stream_url:
-                    return []
-                return [{
-                    'url': stream_url,
-                    'type': 'application/x-mpegURL',
-                    'title': f'TVApp HLS: {stream_name}'
-                }]
-            except (requests.exceptions.Timeout, requests.exceptions.ReadTimeout) as e:
-                if attempt < 2:
-                    time.sleep(1.0 * (attempt + 1))
-                    continue
-                return []
-            except Exception:
-                return []
-    
     def extract_streams(self, url: str) -> List[Dict[str, str]]:
         """Extract video streams from a web page.
 
@@ -588,11 +537,6 @@ class VideoStreamExtractor:
                     'type': 'browser',
                     'title': f'🌐 Browser Mode - {urlparse(url).netloc}'
                 }]
-
-            # Fast path for TheTVApp tokenized streams (avoid full page fetch)
-            fast_tvapp = self._fast_thetvapp_token(url)
-            if fast_tvapp:
-                return fast_tvapp
 
             # Domain-specific timeout/attempt policy
             netloc = urlparse(url).netloc
