@@ -3166,16 +3166,12 @@ class ADHDTVPlayer(QMainWindow):
         self.performance_timer.start(30000)  # Check every 30 seconds
 
     def submit_stream_extraction(self, url: str):
-        """Run extraction in the process pool to avoid blocking the UI GIL."""
+        """Run extraction in a thread pool (process pool spawn is unreliable with Qt/VLC imports)."""
 
         if not url:
             return self.thread_pool.submit(lambda: [])
 
-        try:
-            return self.extractor_pool.submit(_extract_streams_worker, url)
-        except Exception as exc:
-            self.logger.debug("Process pool extract failed, falling back to thread pool: %s", exc)
-            return self.thread_pool.submit(_extract_streams_worker, url)
+        return self.thread_pool.submit(_extract_streams_worker, url)
 
     def _monitor_performance(self):
         """Monitor performance metrics for 8-video optimization."""
@@ -4377,6 +4373,7 @@ class ADHDTVPlayer(QMainWindow):
             # Sync top-bar channel controls to newly selected player's channel
             ch_num = getattr(self.active_player, 'current_channel_number', None)
             if ch_num is not None:
+                self.current_channel = ch_num
                 if hasattr(self, 'channel_input'):
                     self.channel_input.setText(str(ch_num))
                 if hasattr(self, 'lineup_label'):
