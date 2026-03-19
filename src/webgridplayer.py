@@ -539,13 +539,21 @@ class VideoStreamExtractor:
         if stream_name.count('-') > 2:
             return []
         token_url = f"https://thetvapp.to/token/{stream_name.replace('-', '').upper()}"
+        _fast_token_headers = {
+            'Referer': page_url,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+        }
         # Retry token fetch on timeout
         for attempt in range(3):
             try:
                 # Add delay between fast token requests
                 if attempt > 0:
                     time.sleep(self.request_delay)
-                resp = self.session.get(token_url, headers={'Referer': page_url}, timeout=self.fast_token_timeout)
+                resp = self.session.get(token_url, headers=_fast_token_headers, timeout=self.fast_token_timeout)
                 if resp.status_code != 200:
                     return []
                 data = resp.json()
@@ -572,8 +580,9 @@ class VideoStreamExtractor:
         """
         response = None
         try:
-            # tvpass.org: treat as browser-only to avoid slow/JS-heavy extraction
-            if 'tvpass.org' in urlparse(url).netloc:
+            # JS-heavy sites: return browser mode immediately to avoid useless scraping
+            _browser_only_domains = ('tvpass.org', 'kristv.com', 'kiiitv.com', 'ewtn.com')
+            if any(d in urlparse(url).netloc for d in _browser_only_domains):
                 return [{
                     'url': url,
                     'type': 'browser',
@@ -3382,34 +3391,20 @@ class ADHDTVPlayer(QMainWindow):
         # Control panel
         self.control_panel = self.create_control_panel()
         main_layout.addWidget(self.control_panel)
-        
-        # Toggle control panel button (small, in corner)
-        self.toggle_button = QPushButton("▼ Hide Controls")
-        self.toggle_button.setMaximumWidth(150)
-        self.toggle_button.setStyleSheet("""
-            QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #3a3a3a, stop:1 #2a2a2a);
-                color: #ffffff;
-                border: 1px solid #555;
-                border-radius: 6px;
-                padding: 4px 8px;
-                font-size: 10pt;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #4a4a4a, stop:1 #3a3a3a);
-                border: 1px solid #666;
-            }
-            QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #2a2a2a, stop:1 #1a1a1a);
-            }
-        """)
-        self.toggle_button.clicked.connect(self.toggle_control_panel)
-        main_layout.addWidget(self.toggle_button)
-        
+
+        # Auto-hide: thin hover-strip at the top so users can reveal the panel by
+        # moving the mouse to the very top of the window (like a Windows taskbar).
+        self._autohide_pending = False
+        self._autohide_delay_timer = QTimer(self)
+        self._autohide_delay_timer.setSingleShot(True)
+        self._autohide_delay_timer.setInterval(2200)   # ms before hiding
+        self._autohide_delay_timer.timeout.connect(self._run_autohide)
+        # Poll cursor position every 80 ms — lightweight check
+        self._hover_poll_timer = QTimer(self)
+        self._hover_poll_timer.setInterval(80)
+        self._hover_poll_timer.timeout.connect(self._poll_hover_autohide)
+        self._hover_poll_timer.start()
+
         # Grid container
         self.grid_container = QWidget()
         self.grid_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -3421,8 +3416,7 @@ class ADHDTVPlayer(QMainWindow):
         main_layout.addWidget(self.grid_container)
         # Make sure the grid gets nearly all vertical space when resizing
         main_layout.setStretch(0, 0)  # control panel
-        main_layout.setStretch(1, 0)  # toggle button
-        main_layout.setStretch(2, 1)  # grid container
+        main_layout.setStretch(1, 1)  # grid container
         
         # Status bar
         self.status_bar = self.statusBar()
@@ -3449,7 +3443,6 @@ class ADHDTVPlayer(QMainWindow):
             self.resize(self.display_resolution[0], self.display_resolution[1])
         if not self.control_panel_visible:
             self.control_panel.setVisible(False)
-            self.toggle_button.setText("▲ Show Controls")
         if self.debug_overlay_enabled:
             self._init_debug_overlay()
 
@@ -4437,6 +4430,15 @@ class ADHDTVPlayer(QMainWindow):
             self.logger.debug(f"Active player changed to Player #{display_id}")
             self.action_logger.info(f"Selected Player #{display_id}")
 
+            # Sync top-bar channel controls to newly selected player's channel
+            ch_num = getattr(self.active_player, 'current_channel_number', None)
+            if ch_num is not None:
+                if hasattr(self, 'channel_input'):
+                    self.channel_input.setText(str(ch_num))
+                if hasattr(self, 'lineup_label'):
+                    ch_title = self.channels.get(ch_num, {}).get('title', '')
+                    self.lineup_label.setText(ch_title)
+
             # Re-apply audio policies after selection change
             # If global solo is on, ensure the new active is unmuted and others follow policy
             if getattr(self, 'solo_mode_active', False):
@@ -5202,8 +5204,6 @@ class ADHDTVPlayer(QMainWindow):
         """Hide/show UI overlays in fullscreen mode."""
         if hasattr(self, 'control_panel') and self.control_panel:
             self.control_panel.setVisible(visible)
-        if hasattr(self, 'toggle_button') and self.toggle_button:
-            self.toggle_button.setVisible(visible)
         if hasattr(self, 'status_bar') and self.status_bar:
             self.status_bar.setVisible(visible)
 
@@ -6473,10 +6473,58 @@ class ADHDTVPlayer(QMainWindow):
         self.handle_solo_deactivated(None)
     
     def toggle_control_panel(self):
-        """Toggle control panel visibility."""
+        """Toggle control panel visibility (also called by auto-hide logic)."""
         self.control_panel_visible = not self.control_panel_visible
         self.control_panel.setVisible(self.control_panel_visible)
-        self.toggle_button.setText("▼ Hide Controls" if self.control_panel_visible else "▲ Show Controls")
+
+    def _poll_hover_autohide(self):
+        """Poll mouse position every ~80 ms to implement auto-hide taskbar behaviour."""
+        if not self.isVisible():
+            return
+        # Suspend auto-hide while in fullscreen player mode
+        if getattr(self, '_player_fullscreen_active', False):
+            return
+
+        try:
+            from PyQt6.QtGui import QCursor
+        except ImportError:
+            from PyQt5.QtGui import QCursor
+
+        cursor_global = QCursor.pos()
+        pos = self.mapFromGlobal(cursor_global)
+
+        # Reveal zone: top 20px of the window
+        TRIGGER_Y = 20
+        panel_h = self.control_panel.sizeHint().height() + 8 if self.control_panel else 130
+
+        if not self.control_panel_visible and pos.y() <= TRIGGER_Y and 0 <= pos.x() <= self.width():
+            # Mouse entered the top strip → reveal panel, cancel any pending hide
+            self.control_panel_visible = True
+            self.control_panel.setVisible(True)
+            self._autohide_delay_timer.stop()
+        elif self.control_panel_visible:
+            if pos.y() <= panel_h:
+                # Mouse is over the panel — keep it visible
+                self._autohide_delay_timer.stop()
+            else:
+                # Mouse moved below panel — start the countdown if not already set
+                if not self._autohide_delay_timer.isActive():
+                    self._autohide_delay_timer.start()
+
+    def _run_autohide(self):
+        """Called after the delay timer fires; hides the panel if mouse is still away."""
+        try:
+            from PyQt6.QtGui import QCursor
+        except ImportError:
+            from PyQt5.QtGui import QCursor
+
+        if not self.control_panel_visible:
+            return
+        panel_h = self.control_panel.sizeHint().height() + 8 if self.control_panel else 130
+        pos = self.mapFromGlobal(QCursor.pos())
+        if pos.y() > panel_h:
+            self.control_panel_visible = False
+            self.control_panel.setVisible(False)
     
     def handle_no_streams_found(self, url: str):
         """Handle case when no streams are found.
