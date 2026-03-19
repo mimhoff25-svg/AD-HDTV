@@ -3300,7 +3300,7 @@ class ADHDTVPlayer(QMainWindow):
             return self.extractor_pool.submit(_extract_streams_worker, url)
         except Exception as exc:
             self.logger.debug("Process pool extract failed, falling back to thread pool: %s", exc)
-            return self.thread_pool.submit(self.extractor.extract_streams, url)
+            return self.thread_pool.submit(_extract_streams_worker, url)
 
     def _monitor_performance(self):
         """Monitor performance metrics for 8-video optimization."""
@@ -4413,7 +4413,12 @@ class ADHDTVPlayer(QMainWindow):
                     ch = self.channels.get(num, {})
                     src = ch.get('source_url')
                     if src:
-                        futures[num] = prewarm_pool.submit(self.extractor.extract_streams, src)
+                        # Use _extract_streams_worker so each thread gets its own
+                        # VideoStreamExtractor (and its own requests.Session).
+                        # Sharing self.extractor across threads causes CSRF/cookie
+                        # races on sites like thetvapp.to that require per-request
+                        # session cookies + CSRF tokens.
+                        futures[num] = prewarm_pool.submit(_extract_streams_worker, src)
 
                 for future in as_completed(futures.values()):
                     # Identify which channel this future belongs to
