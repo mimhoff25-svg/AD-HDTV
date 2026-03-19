@@ -103,7 +103,7 @@ except ImportError:
 
 
 _QWEBENGINEVIEW_CLASS = None
-TOKEN_CACHE_SCHEMA_VERSION = 2
+TOKEN_CACHE_SCHEMA_VERSION = 3
 
 
 def get_webengine_view_class():
@@ -1806,6 +1806,11 @@ class VideoPlayer(QFrame):
             cached_type = ''
             channel.pop('url', None)
             channel.pop('url_type', None)
+        elif channel_url and not main_window._is_cached_thetvapp_token_consistent(channel_num):
+            channel_url = ''
+            cached_type = ''
+            for k in ('url', 'url_type', 'url_expiry', 'url_stream_key'):
+                channel.pop(k, None)
         if channel_url and not main_window._is_cached_stream_valid(channel_num):
             # Allow stale-but-usable to start fast, refresh in background
             if main_window._is_cached_stream_stale_but_usable(channel_num):
@@ -1815,7 +1820,7 @@ class VideoPlayer(QFrame):
                 channel_expiry_valid = False
                 channel_url = ''
                 cached_type = ''
-                for k in ('url', 'url_type', 'url_expiry'):
+                for k in ('url', 'url_type', 'url_expiry', 'url_stream_key'):
                     channel.pop(k, None)
         channel_title = channel.get('title', str(channel_num))
         source_url = channel.get('source_url')
@@ -4881,6 +4886,8 @@ class ADHDTVPlayer(QMainWindow):
                     self.channels[num]['url_type'] = v['url_type']
                 if expiry:
                     self.channels[num]['url_expiry'] = expiry
+                if v.get('url_stream_key'):
+                    self.channels[num]['url_stream_key'] = v['url_stream_key']
                 restored += 1
             if restored:
                 self.logger.info("Restored %d cached tokens from disk", restored)
@@ -4900,7 +4907,12 @@ class ADHDTVPlayer(QMainWindow):
                     continue
                 if expiry and now >= expiry:
                     continue  # already expired, don't persist
-                payload[str(num)] = {'url': url, 'url_type': url_type, 'url_expiry': expiry}
+                payload[str(num)] = {
+                    'url': url,
+                    'url_type': url_type,
+                    'url_expiry': expiry,
+                    'url_stream_key': ch.get('url_stream_key', ''),
+                }
             with open(self.token_cache_file, 'w') as f:
                 json.dump(payload, f)
             self.logger.debug("Flushed %d token(s) to disk", len(payload))
@@ -4945,6 +4957,35 @@ class ADHDTVPlayer(QMainWindow):
             return None
         return None
 
+    def _parse_thetvapp_stream_key(self, url: str) -> str:
+        """Extract the TheTVApp HLS stream key from a token URL."""
+        if not url:
+            return ""
+        try:
+            match = re.search(r'/hls/([^/]+)/', url)
+            return match.group(1) if match else ""
+        except Exception:
+            return ""
+
+    def _is_cached_thetvapp_token_consistent(self, num: int) -> bool:
+        """Reject cached TheTVApp tokens that obviously belong to another channel."""
+        ch = self.channels.get(num, {})
+        src = ch.get('source_url', '') or ''
+        url = ch.get('url', '') or ''
+        title = ch.get('title', str(num))
+        if 'thetvapp.to/tv/' not in src or not url:
+            return True
+
+        stream_key = ch.get('url_stream_key') or self._parse_thetvapp_stream_key(url)
+        if not stream_key:
+            return False
+
+        title_norm = re.sub(r'[^a-z0-9]+', '', title.lower())
+        key_norm = re.sub(r'[^a-z0-9]+', '', stream_key.lower())
+        if len(title_norm) < 3:
+            return True
+        return title_norm in key_norm or key_norm in title_norm
+
     def _cache_channel_stream(self, num: int, url: str, stream_type: str = ""):
         """Cache stream URL with optional type and expiry for quick reuse."""
         if num not in self.channels or not url:
@@ -4952,6 +4993,11 @@ class ADHDTVPlayer(QMainWindow):
         self.channels[num]['url'] = url
         if stream_type:
             self.channels[num]['url_type'] = stream_type
+        stream_key = self._parse_thetvapp_stream_key(url)
+        if stream_key:
+            self.channels[num]['url_stream_key'] = stream_key
+        else:
+            self.channels[num].pop('url_stream_key', None)
         exp = self._parse_url_expiry(url)
         if exp:
             self.channels[num]['url_expiry'] = exp
@@ -5270,13 +5316,18 @@ class ADHDTVPlayer(QMainWindow):
         # Discard invalid, but allow slightly stale tokens for fast start
         if current_token_url and not _is_playable_stream(current_token_url, cached_type):
             current_token_url = None
+        elif current_token_url and not self._is_cached_thetvapp_token_consistent(number):
+            self.logger.warning("Discarding mismatched cached token for channel %s", number)
+            current_token_url = None
+            for k in ('url', 'url_type', 'url_expiry', 'url_stream_key'):
+                channel.pop(k, None)
         elif current_token_url and not self._is_cached_stream_valid(number):
             if self._is_cached_stream_stale_but_usable(number):
                 # Use stale token to start fast; refresh in background
                 self._refresh_channel_in_background(number)
             else:
                 current_token_url = None
-                for k in ('url', 'url_type', 'url_expiry'):
+                for k in ('url', 'url_type', 'url_expiry', 'url_stream_key'):
                     channel.pop(k, None)
 
         display_title = f"Ch {number}: {title}" if title else f"Ch {number}"
