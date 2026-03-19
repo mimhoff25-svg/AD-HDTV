@@ -31,6 +31,7 @@ distro-info==1.7+build1
 duplicity==2.1.4
 fasteners==0.18
 fonttools==4.46.0
+Flask==3.0.2
 fs==2.4.16
 gpg==1.18.0
 h11==0.14.0

@@ -56,14 +56,17 @@ if '_prefetch_next_channel' in content:
     if 'def _prefetch_next_channel' in content:
         print("✓ Prefetch extracts next and previous channels in background")
     if 'tune_channel' in content and '_prefetch_next_channel' in content:
-        # Check if it's called after tuning
-        start_idx = content.find('def tune_channel')
-        end_idx = content.find('\n    def ', start_idx + 1)
-        tune_method = content[start_idx:end_idx]
-        if '_prefetch_next_channel' in tune_method:
-            print("✓ Prefetch called after each channel tune")
+        # Check if it's called after tuning - find the main tune_channel method (not tune_channel_from_input)
+        start_idx = content.find('def tune_channel(self, number: int)')
+        if start_idx > 0:
+            end_idx = content.find('\n    def ', start_idx + 1)
+            tune_method = content[start_idx:end_idx]
+            if '_prefetch_next_channel' in tune_method:
+                print("✓ Prefetch called after each channel tune")
+            else:
+                print("⚠ Prefetch may not be integrated into tune_channel()")
         else:
-            print("⚠ Prefetch may not be integrated into tune_channel()")
+            print("⚠ Could not find tune_channel(self, number: int) method")
 else:
     print("✗ Prefetch functionality not implemented")
 

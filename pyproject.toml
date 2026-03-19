@@ -37,6 +37,7 @@ dependencies = [
     "PyQt6>=6.0.0 ; python_version>='3.8'",
     "PyQt5>=5.15.0 ; python_version>='3.8'",
     "python-vlc>=3.0.20123",
+    "Flask>=3.0.0",
     "requests>=2.25.0",
     "beautifulsoup4>=4.9.0",
 ]
@@ -106,4 +107,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=webgridplayer --cov-report=html --cov-report=term"
+addopts = "-v"

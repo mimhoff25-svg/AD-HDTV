@@ -1,3 +1,20 @@
+"""Remote control API for AD_HDTV.
+
+Simple Flask server to receive remote commands.
+"""
+
+from flask import Flask, request, jsonify
+import threading
+
+app = Flask(__name__)
+
+# Example: You should connect these to your real player logic
+player_state = {
+    'playing': False,
+    'channel': 1
+}
+
+
 @app.route('/api_options', methods=['GET'])
 def api_options():
     options = [
@@ -28,19 +45,6 @@ def api_options():
         }
     ]
     return jsonify({'api_options': options})
-# Remote control API for AD_HDTV
-# Simple Flask server to receive remote commands
-
-from flask import Flask, request, jsonify
-import threading
-
-app = Flask(__name__)
-
-# Example: You should connect these to your real player logic
-player_state = {
-    'playing': False,
-    'channel': 1
-}
 
 @app.route('/play', methods=['POST'])
 def play():

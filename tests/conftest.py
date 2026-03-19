@@ -22,6 +22,6 @@ MANUAL_TESTS: Set[str] = {
 }
 
 
-def pytest_ignore_collect(path, config):
-    name = getattr(path, "basename", None) or getattr(path, "name", "")
+def pytest_ignore_collect(collection_path, config):
+    name = getattr(collection_path, "name", "")
     return name in MANUAL_TESTS

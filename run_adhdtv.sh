@@ -1,9 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# AD-HDTV launcher script
 
-# AD-HDTV launcher script - handles headless/server environments
+set -e
 
+# Get the directory where this script resides
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."
+cd "$SCRIPT_DIR"
 
 # Decide whether to run with a GUI or headless. Default to GUI when a display
 # is available; fall back to offscreen only when explicitly requested or when
@@ -18,7 +20,4 @@ elif [[ "${QT_QPA_PLATFORM:-}" == "offscreen" ]]; then
 fi
 
 echo "🚀 Starting AD-HDTV (${MODE} mode)..."
-echo "   QT_QPA_PLATFORM=${QT_QPA_PLATFORM:-<unset>}"
-
-# Run the app - GTK warnings are expected in headless and can be ignored
-exec python3 app.py
+exec python3 app.py "$@"
