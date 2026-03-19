@@ -1029,46 +1029,21 @@ class VideoPlayer(QFrame):
         self.channel_number_label.setFixedWidth(60)
         info_layout.addWidget(self.channel_number_label)
 
-        # Combined URL display and channel selector
-        self.url_combo = QComboBox()
-        self.url_combo.setStyleSheet("""
-            QComboBox {
+        # Channel title display (replaces channel-selector combo box)
+        self.title_label = QLabel("—")
+        self.title_label.setStyleSheet("""
+            QLabel {
                 color: #ffffff;
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 rgba(42, 42, 42, 200), stop:1 rgba(26, 26, 26, 200));
-                padding: 4px 8px;
-                border-radius: 4px;
+                background: transparent;
+                padding: 2px 6px;
                 font-size: 10pt;
                 font-weight: 500;
-                border: 1px solid #555;
-            }
-            QComboBox:hover {
-                border: 1px solid #4da3ff;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 20px;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 6px solid #ffffff;
-                margin-right: 5px;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #2a2a2a;
-                color: #ffffff;
-                selection-background-color: #4da3ff;
-                selection-color: #ffffff;
-                border: 1px solid #555;
             }
         """)
-        self.url_combo.addItem("Empty")
-        self.url_combo.setCurrentIndex(0)
-        self.url_combo.currentIndexChanged.connect(self.on_url_combo_selected)
-        self.url_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        info_layout.addWidget(self.url_combo)
+        self.title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        self.title_label.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        info_layout.addWidget(self.title_label)
         
         # Modern button styling
         button_style = """
@@ -1177,72 +1152,33 @@ class VideoPlayer(QFrame):
         layout.addLayout(info_layout)
         self.setLayout(layout)
 
-    def on_url_combo_selected(self, index):
-        """Handle selection from the URL/channel combo box."""
-        if index <= 0:  # Skip the first item (current display)
-            return
-        # Get channel number from the combo box item data
-        channel_num = self.url_combo.itemData(index)
-        if channel_num is not None:
-            self.load_channel_by_number(channel_num)
-            # Will update to show the selected channel
-    
     def update_channel_list(self):
-        """Update the URL combo box with current channels from main window."""
-        # Get main window reference
+        """Refresh the title label and channel badge for the current channel."""
         main_window = self.get_main_window()
-        
-        if hasattr(self, 'url_combo'):
-            current_text = self.url_combo.currentText()
-            self.url_combo.clear()
-            self.url_combo.addItem(current_text)  # Current display
-            
-            # Add all channels to dropdown
-            if main_window and main_window.channels:
-                sorted_channels = sorted(main_window.channels.keys())
-                for ch_num in sorted_channels:
-                    ch_data = main_window.channels[ch_num]
-                    ch_title = ch_data.get('title', str(ch_num))
-                    channel_entry = f"Ch {ch_num}: {ch_title}"
-                    self.url_combo.addItem(channel_entry, ch_num)
-            
-            self.url_combo.setCurrentIndex(0)
-            # Refresh badge if tuned
-            if getattr(self, 'current_channel_number', None) is not None:
-                ch_num = self.current_channel_number
-                ch = main_window.channels.get(ch_num) if main_window else None
-                if ch:
-                    self.refresh_channel_badge(ch_num, ch)
-    
+        if getattr(self, 'current_channel_number', None) is not None and main_window:
+            ch = main_window.channels.get(self.current_channel_number)
+            if ch:
+                self.refresh_channel_badge(self.current_channel_number, ch)
+                self.title_label.setText(ch.get('title', str(self.current_channel_number)))
+
     def set_display_text(self, text: str):
-        """Set the display text in the URL combo box.
-        Preferentially shows channel label if tuned to a channel."""
-        if hasattr(self, 'url_combo'):
-            # Check if we're currently tuned to a channel
-            if getattr(self, 'current_channel_number', None) is not None:
-                main_window = self.get_main_window()
-                if main_window and main_window.channels:
-                    num = self.current_channel_number
-                    ch = main_window.channels.get(num, {})
-                    if ch:  # Only override if channel exists
-                        ch_title = ch.get('title', str(num))
-                        display = ch_title
-                        self.url_combo.setItemText(0, display)
-                        self.url_combo.setCurrentIndex(0)
-                        self.refresh_channel_badge(num, ch)
-                        return
-            
-            # Fallback: show provided text
-            self.url_combo.setItemText(0, text)
-            self.url_combo.setCurrentIndex(0)
+        """Update the title label. Shows channel name when tuned to a channel."""
+        if getattr(self, 'current_channel_number', None) is not None:
+            main_window = self.get_main_window()
+            if main_window:
+                ch = main_window.channels.get(self.current_channel_number, {})
+                if ch:
+                    self.title_label.setText(ch.get('title', str(self.current_channel_number)))
+                    self.refresh_channel_badge(self.current_channel_number, ch)
+                    return
+        self.title_label.setText(text)
 
     def get_display_text(self) -> str:
-        """Return the current display text shown in the combo box."""
-        if hasattr(self, 'url_combo'):
-            text = self.url_combo.currentText()
-            if text:
-                return text.strip()
-        # Fallback to current URL if combo is unavailable
+        """Return the current title label text."""
+        if hasattr(self, 'title_label'):
+            text = self.title_label.text()
+            if text and text != '—':
+                return text
         return self.current_url or ""
 
     def set_selected(self, selected: bool):
@@ -1495,12 +1431,8 @@ class VideoPlayer(QFrame):
             logger.error(f"Player {self.player_id}: Could not find main window reference")
             return
             
-        # Derive a friendly display title from the combo box (falls back to URL)
-        display_title = None
-        if hasattr(self, 'url_combo'):
-            display_title = self.url_combo.currentText().strip()
-        if not display_title:
-            display_title = self.current_url
+        # Derive a friendly display title from the title label (falls back to URL)
+        display_title = self.get_display_text() or self.current_url
         # Prompt for channel number
         channel_num, ok = QInputDialog.getInt(
             self, 
@@ -3002,8 +2934,8 @@ class VideoPlayer(QFrame):
             self.channel_logo_label.setVisible(visible)
         if hasattr(self, 'channel_number_label'):
             self.channel_number_label.setVisible(visible)
-        if hasattr(self, 'url_combo'):
-            self.url_combo.setVisible(visible)
+        if hasattr(self, 'title_label'):
+            self.title_label.setVisible(visible)
         if hasattr(self, 'mode_button'):
             self.mode_button.setVisible(visible)
         if hasattr(self, 'mute_button'):
@@ -4049,41 +3981,80 @@ class ADHDTVPlayer(QMainWindow):
         layout.addWidget(audio_group)
         
         # Channels (cable-box style)
-        channel_group = QGroupBox("Channels")
-        channel_layout = QHBoxLayout()
-        channel_group.setLayout(channel_layout)
+        channel_group = QGroupBox("📺 Channels")
+        channel_outer = QVBoxLayout()
+        channel_group.setLayout(channel_outer)
+
+        # Row 1: number input + nav buttons + Tune
+        ch_row1 = QHBoxLayout()
+        ch_row1.setSpacing(4)
 
         self.channel_input = QLineEdit()
-        self.channel_input.setPlaceholderText("Enter channel #")
-        self.channel_input.setFixedWidth(120)
+        self.channel_input.setPlaceholderText("Ch #")
+        self.channel_input.setFixedWidth(56)
+        self.channel_input.setStyleSheet("""
+            QLineEdit {
+                font-size: 13pt;
+                font-weight: bold;
+                padding: 3px 6px;
+                background: #1e1e2e;
+                color: #ffffff;
+                border: 1px solid #555;
+                border-radius: 5px;
+            }
+            QLineEdit:focus { border: 1px solid #4da3ff; }
+        """)
         self.channel_input.returnPressed.connect(self.tune_channel_from_input)
-        channel_layout.addWidget(self.channel_input)
+        ch_row1.addWidget(self.channel_input)
 
-        tune_btn = QPushButton("Tune")
+        tune_btn = QPushButton("⏎ Tune")
+        tune_btn.setFixedHeight(30)
         tune_btn.clicked.connect(self.tune_channel_from_input)
-        channel_layout.addWidget(tune_btn)
+        ch_row1.addWidget(tune_btn)
 
-        ch_up_btn = QPushButton("Ch +")
+        ch_up_btn = QPushButton("▲")
+        ch_up_btn.setFixedSize(30, 30)
+        ch_up_btn.setToolTip("Channel Up")
         ch_up_btn.clicked.connect(self.channel_up)
-        channel_layout.addWidget(ch_up_btn)
+        ch_row1.addWidget(ch_up_btn)
 
-        ch_dn_btn = QPushButton("Ch -")
+        ch_dn_btn = QPushButton("▼")
+        ch_dn_btn.setFixedSize(30, 30)
+        ch_dn_btn.setToolTip("Channel Down")
         ch_dn_btn.clicked.connect(self.channel_down)
-        channel_layout.addWidget(ch_dn_btn)
+        ch_row1.addWidget(ch_dn_btn)
 
-        manage_ch_btn = QPushButton("Manage")
-        manage_ch_btn.clicked.connect(self.manage_channels_dialog)
-        channel_layout.addWidget(manage_ch_btn)
+        channel_outer.addLayout(ch_row1)
 
-        guide_btn = QPushButton("Guide")
-        guide_btn.setCheckable(False)
-        guide_btn.setToolTip("Open TV Guide (fixed 1280x720 grid)")
-        guide_btn.clicked.connect(self.open_tv_guide_dialog)
-        channel_layout.addWidget(guide_btn)
+        # Row 2: now-on label + Manage + Guide
+        ch_row2 = QHBoxLayout()
+        ch_row2.setSpacing(4)
 
         self.lineup_label = QLabel("")
-        self.lineup_label.setStyleSheet("color: gray;")
-        channel_layout.addWidget(self.lineup_label)
+        self.lineup_label.setStyleSheet("""
+            QLabel {
+                color: #aaaacc;
+                font-size: 9pt;
+                padding-left: 2px;
+            }
+        """)
+        self.lineup_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        ch_row2.addWidget(self.lineup_label)
+
+        manage_ch_btn = QPushButton("⚙ Manage")
+        manage_ch_btn.setFixedHeight(24)
+        manage_ch_btn.setStyleSheet("font-size: 9pt; padding: 2px 6px;")
+        manage_ch_btn.clicked.connect(self.manage_channels_dialog)
+        ch_row2.addWidget(manage_ch_btn)
+
+        guide_btn = QPushButton("📋 Guide")
+        guide_btn.setFixedHeight(24)
+        guide_btn.setStyleSheet("font-size: 9pt; padding: 2px 6px;")
+        guide_btn.setToolTip("Open TV Guide (fixed 1280x720 grid)")
+        guide_btn.clicked.connect(self.open_tv_guide_dialog)
+        ch_row2.addWidget(guide_btn)
+
+        channel_outer.addLayout(ch_row2)
 
         layout.addWidget(channel_group)
 
