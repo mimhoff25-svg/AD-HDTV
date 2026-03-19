@@ -529,8 +529,9 @@ class VideoStreamExtractor:
         """
         response = None
         try:
-            # JS-heavy sites: return browser mode immediately to avoid useless scraping
-            _browser_only_domains = ('tvpass.org', 'kristv.com', 'kiiitv.com', 'ewtn.com')
+            # Only force known browser-only domains into browser mode.
+            # KIII and KRIS can yield direct HLS streams and should still be extracted.
+            _browser_only_domains = ('tvpass.org', 'ewtn.com')
             if any(d in urlparse(url).netloc for d in _browser_only_domains):
                 return [{
                     'url': url,
@@ -5290,8 +5291,9 @@ class ADHDTVPlayer(QMainWindow):
 
         # Otherwise, extract fresh stream from source_url if available
         if source_url:
-            # Browser-only channels: skip thread pool, load directly in web view
-            _browser_only = ('tvpass.org', 'kristv.com', 'kiiitv.com', 'ewtn.com')
+            # Only skip extraction for domains that are actually browser-only.
+            # KIII and KRIS have direct stream extraction support.
+            _browser_only = ('tvpass.org', 'ewtn.com')
             if any(d in urlparse(source_url).netloc for d in _browser_only):
                 self.logger.info(f"Channel {number} ({title}): browser-only, loading in web view")
                 if self.active_player and hasattr(self.active_player, 'current_channel_number'):
