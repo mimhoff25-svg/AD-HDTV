@@ -1858,7 +1858,14 @@ class VideoPlayer(QFrame):
                             main_window.add_url_to_browser_mode(source_url or new_url or self.source_url)
                             self.status_label.setText("🌐 Browser")
                         else:
-                            QMessageBox.information(self, "No Streams", f"No streams found for Channel {channel_num}.")
+                            fallback_url = main_window._get_cached_playable_fallback(channel_num)
+                            if fallback_url:
+                                load_with_url(fallback_url)
+                                main_window.status_bar.showMessage(
+                                    f"Using cached stream for Channel {channel_num} (refresh failed)"
+                                )
+                            else:
+                                QMessageBox.information(self, "No Streams", f"No streams found for Channel {channel_num}.")
                     finally:
                         return
 
@@ -5029,6 +5036,17 @@ class ADHDTVPlayer(QMainWindow):
         now = int(time.time())
         return (exp <= now < exp + grace_seconds)
 
+    def _get_cached_playable_fallback(self, num: int) -> Optional[str]:
+        """Return last cached URL if it is still safe to use as a temporary fallback."""
+        ch = self.channels.get(num, {})
+        url = ch.get('url')
+        stype = ch.get('url_type', '')
+        if not url or not _is_playable_stream(url, stype):
+            return None
+        if not self._is_cached_thetvapp_token_consistent(num):
+            return None
+        return url
+
     def _refresh_channel_in_background(self, num: int):
         """Refresh token for a specific channel without interrupting playback."""
         ch = self.channels.get(num, {})
@@ -5427,11 +5445,29 @@ class ADHDTVPlayer(QMainWindow):
                             # Last resort: try to load even if not clearly playable
                             self.add_url_to_grid(new_url, title=display_title, source_url=source_url)
                         else:
-                            self.status_bar.showMessage(f"No playable streams for Channel {number}")
-                            self.logger.warning(f"No streams found for Channel {number}")
+                            fallback_url = self._get_cached_playable_fallback(number)
+                            if self.active_player and fallback_url:
+                                if hasattr(self.active_player, 'current_channel_number'):
+                                    self.active_player.current_channel_number = number
+                                self.active_player.load_media(fallback_url, title=display_title, source_url=source_url)
+                                self.refresh_audio_states()
+                                self.status_bar.showMessage(f"Using cached stream for Channel {number} (refresh failed)")
+                                self.logger.warning("Extraction empty for ch %s; using cached fallback", number)
+                            else:
+                                self.status_bar.showMessage(f"No playable streams for Channel {number}")
+                                self.logger.warning(f"No streams found for Channel {number}")
                     except Exception as e:
-                        self.logger.error(f"Channel {number} extraction error: {e}")
-                        self.status_bar.showMessage(f"Error loading Channel {number}: {type(e).__name__}")
+                        fallback_url = self._get_cached_playable_fallback(number)
+                        if self.active_player and fallback_url:
+                            if hasattr(self.active_player, 'current_channel_number'):
+                                self.active_player.current_channel_number = number
+                            self.active_player.load_media(fallback_url, title=display_title, source_url=source_url)
+                            self.refresh_audio_states()
+                            self.status_bar.showMessage(f"Using cached stream for Channel {number} (temporary error)")
+                            self.logger.warning("Channel %s extraction error, using cached fallback: %s", number, e)
+                        else:
+                            self.logger.error(f"Channel {number} extraction error: {e}")
+                            self.status_bar.showMessage(f"Error loading Channel {number}: {type(e).__name__}")
 
                 future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
 
@@ -5464,6 +5500,9 @@ class ADHDTVPlayer(QMainWindow):
                 ch = self.channels.get(ch_num, {})
                 # Skip if already cached or no source URL
                 if (ch.get('url') and self._is_cached_stream_valid(ch_num)) or not ch.get('source_url'):
+                    continue
+                # Avoid hammering TheTVApp in background; it can rate-limit with 503.
+                if 'thetvapp.to/tv/' in (ch.get('source_url') or ''):
                     continue
                 if ch_num in self._prefetch_pending:
                     continue
