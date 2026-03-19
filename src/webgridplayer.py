@@ -3052,7 +3052,8 @@ class ADHDTVPlayer(QMainWindow):
         self.current_volume = int(self.config.get("default_volume", 70))
         self.extractor = VideoStreamExtractor()
         # Foreground pool handles user-visible actions such as tune/load/recovery.
-        pool_workers = int(os.environ.get("ADHDTV_THREAD_WORKERS", 3))
+        # 8 workers lets rapid channel-surfing run 4+ extractions concurrently.
+        pool_workers = int(os.environ.get("ADHDTV_THREAD_WORKERS", 8))
         self.thread_pool = ThreadPoolExecutor(max_workers=pool_workers, thread_name_prefix='webgrid')
         extraction_workers = int(os.environ.get("ADHDTV_EXTRACTION_WORKERS", 2))
         ctx = get_context("spawn")
@@ -5315,10 +5316,20 @@ class ADHDTVPlayer(QMainWindow):
                 if hasattr(self.active_player, 'status_label'):
                     self.active_player.status_label.setText("⏳")
 
-            future = self.submit_stream_extraction(source_url)
+            # Debounce: wait 350ms before submitting extraction so that rapid
+            # channel-surfing (pressing ▲ multiple times) doesn't flood the pool.
+            # If the user navigates again within 350ms, current_channel changes
+            # and we skip submission.
+            _req_id = tune_request_id
 
-            def on_done():
-                if future.done():
+            def _submit_extraction_if_current():
+                if self.current_channel != number or self._tune_request_id != _req_id:
+                    return  # user navigated away; skip this channel
+                future = self.submit_stream_extraction(source_url)
+
+                def on_done():
+                    if not future.done():
+                        return
                     # Only discard if user has navigated to a different channel
                     if self.current_channel != number:
                         self.logger.debug(
@@ -5357,10 +5368,10 @@ class ADHDTVPlayer(QMainWindow):
                     except Exception as e:
                         self.logger.error(f"Channel {number} extraction error: {e}")
                         self.status_bar.showMessage(f"Error loading Channel {number}: {type(e).__name__}")
-                    finally:
-                        return
 
-            future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
+                future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
+
+            QTimer.singleShot(350, _submit_extraction_if_current)
             
             # Prefetch next channel in background for smooth up/down navigation
             self._prefetch_next_channel(number)
