@@ -2152,14 +2152,12 @@ class VideoPlayer(QFrame):
                     # For TheTVApp streams, use TheTVApp domain as referer
                     if 'thetvapp.to' in url:
                         self.media.add_option(':http-referrer=https://thetvapp.to')
-                        # Additional options for token-based streams - LIVE STREAM mode
-                        self.media.add_option(':network-caching=3000')    # High buffering for slow servers
-                        self.media.add_option(':live-caching=3000')       # High live cache for continuous playback
+                        # Use VLC's native adaptive demuxer (not avformat) — it properly
+                        # refreshes the live HLS segment list and handles token URLs.
+                        self.media.add_option(':network-caching=3000')
+                        self.media.add_option(':live-caching=3000')
                         self.media.add_option(':http-reconnect')
-                        self.media.add_option(':http-continuous')         # Force continuous HTTP stream
-                        self.media.add_option(':http-timeout=60000')      # 60s timeout for slow server
-                        self.media.add_option(':demux=avformat')          # Use avformat demuxer for better HLS support
-                        self.media.add_option(':avformat-format=hls')     # Explicitly set HLS format
+                        self.media.add_option(':http-timeout=60000')
                         logger.info("Applied TheTVApp optimizations for: %s", url[:50])
                     elif self.source_url:
                         self.media.add_option(f':http-referrer={self.source_url}')
@@ -3274,7 +3272,7 @@ class ADHDTVPlayer(QMainWindow):
         if env_prewarm_conc and env_prewarm_conc.isdigit():
             self.prewarm_concurrency = int(env_prewarm_conc)
         else:
-            self.prewarm_concurrency = int(channel_config.get("prewarm_concurrency", 2))
+            self.prewarm_concurrency = int(channel_config.get("prewarm_concurrency", 3))
         raw_delay = os.environ.get("ADHDTV_PREWARM_DELAY_MS", channel_config.get("prewarm_delay_ms"))
         self.prewarm_delay_ms = _parse_optional_int_setting(raw_delay, DEFAULT_PREWARM_DELAY_MS)
         self.create_grid()
