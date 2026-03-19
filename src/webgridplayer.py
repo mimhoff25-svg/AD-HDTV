@@ -4340,6 +4340,14 @@ class ADHDTVPlayer(QMainWindow):
                     continue
                 if not ch.get('source_url'):
                     continue
+                # By default, don't prewarm TheTVApp channels at startup.
+                # Those token requests are rate-limited upstream and can delay
+                # interactive tuning right after launch.
+                if (
+                    'thetvapp.to/tv/' in (ch.get('source_url') or '')
+                    and os.environ.get('ADHDTV_PREWARM_THETVAPP', '0') != '1'
+                ):
+                    continue
                 to_extract.append(num)
             
             if not to_extract:
