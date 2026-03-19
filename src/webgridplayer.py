@@ -4465,11 +4465,14 @@ class ADHDTVPlayer(QMainWindow):
             target_player._manually_muted = False
 
         # Build allowed set
+        any_solo_active = bool(solo_player) or getattr(self, 'solo_mode_active', False)
         allowed = set()
         if target_player:
             allowed.add(target_player)
-        else:
+        elif not any_solo_active:
+            # Normal mode: all players with content get audio
             allowed.update([p for p in self.players if getattr(p, 'current_url', '')])
+        # else: solo mode is on but active player is empty → keep allowed empty (silence all)
 
         master_volume = getattr(self, 'current_volume', 60)
 
