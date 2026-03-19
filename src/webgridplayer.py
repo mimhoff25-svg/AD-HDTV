@@ -103,6 +103,7 @@ except ImportError:
 
 
 _QWEBENGINEVIEW_CLASS = None
+TOKEN_CACHE_SCHEMA_VERSION = 2
 
 
 def get_webengine_view_class():
@@ -4854,9 +4855,14 @@ class ADHDTVPlayer(QMainWindow):
                 return
             with open(self.token_cache_file, 'r') as f:
                 cache = json.load(f)
+            if cache.get('_version') != TOKEN_CACHE_SCHEMA_VERSION:
+                self.logger.info("Ignoring stale token cache schema in %s", self.token_cache_file)
+                return
             now = int(time.time())
             restored = 0
             for k, v in cache.items():
+                if k == '_version':
+                    continue
                 try:
                     num = int(k)
                 except (ValueError, TypeError):
@@ -4885,7 +4891,7 @@ class ADHDTVPlayer(QMainWindow):
         """Write all in-memory stream tokens to disk for persistence across restarts."""
         try:
             now = int(time.time())
-            payload = {}
+            payload = {'_version': TOKEN_CACHE_SCHEMA_VERSION}
             for num, ch in self.channels.items():
                 url = ch.get('url')
                 expiry = ch.get('url_expiry')
@@ -5444,7 +5450,7 @@ class ADHDTVPlayer(QMainWindow):
                         # Still processing, check again later
                         QTimer.singleShot(50, lambda: on_prefetch_done(n, f))
                 
-                QTimer.singleShot(50, lambda: on_prefetch_done(ch_num, future))
+                QTimer.singleShot(50, lambda n=ch_num, f=future: on_prefetch_done(n, f))
         except Exception as e:
             self.logger.debug(f"Prefetch error: {e}")
 
