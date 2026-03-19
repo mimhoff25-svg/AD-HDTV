@@ -5235,15 +5235,25 @@ class ADHDTVPlayer(QMainWindow):
             self.action_logger.info(f"Tuned to Channel {number}: {title}")
             self.status_bar.showMessage(f"Loading channel {number}: {title}...")
 
+            # Show loading state immediately on the active player so the user knows to wait
+            if self.active_player:
+                if hasattr(self.active_player, 'current_channel_number'):
+                    self.active_player.current_channel_number = number
+                if hasattr(self.active_player, 'set_display_text'):
+                    self.active_player.set_display_text(f"⏳ {display_title}")
+                if hasattr(self.active_player, 'status_label'):
+                    self.active_player.status_label.setText("⏳")
+
             future = self.submit_stream_extraction(source_url)
 
             def on_done():
                 if future.done():
-                    if tune_request_id != self._tune_request_id or self.current_channel != number:
+                    # Only discard if user has navigated to a different channel
+                    if self.current_channel != number:
                         self.logger.debug(
-                            "Ignoring stale tune result for channel %s (request %s)",
+                            "Ignoring stale tune result for channel %s (now on %s)",
                             number,
-                            tune_request_id,
+                            self.current_channel,
                         )
                         return
                     try:
@@ -5260,8 +5270,12 @@ class ADHDTVPlayer(QMainWindow):
                             self.status_bar.showMessage(f"✓ Tuned to channel {number}: {title}")
                         elif candidate and WEBENGINE_AVAILABLE:
                             # Use browser mode fallback when only a webpage is available
-                            self.set_active_player(self.active_player or self.players[0])
-                            self.add_url_to_browser_mode(source_url or new_url)
+                            if self.active_player:
+                                if hasattr(self.active_player, 'current_channel_number'):
+                                    self.active_player.current_channel_number = number
+                            target = self.active_player or (self.players[0] if self.players else None)
+                            if target:
+                                self.add_url_to_browser_mode(source_url or new_url)
                             self.status_bar.showMessage(f"🌐 Browser mode for Channel {number}")
                         elif new_url:
                             # Last resort: try to load even if not clearly playable
@@ -5323,6 +5337,16 @@ class ADHDTVPlayer(QMainWindow):
                                 if url and _is_playable_stream(url, stype):
                                     self._cache_channel_stream(n, url, stype)
                                     self.logger.debug(f"Prefetched token for channel {n}")
+                                    # If the user is currently waiting on this channel, load it now
+                                    if self.current_channel == n and self.active_player:
+                                        ch_data = self.channels.get(n, {})
+                                        t = ch_data.get('title', str(n))
+                                        dtitle = f"Ch {n}: {t}" if t else f"Ch {n}"
+                                        if hasattr(self.active_player, 'current_channel_number'):
+                                            self.active_player.current_channel_number = n
+                                        self.active_player.load_media(url, title=dtitle, source_url=ch_data.get('source_url'))
+                                        self.refresh_audio_states()
+                                        self.status_bar.showMessage(f"✓ Tuned to channel {n}: {t}")
                         except Exception as e:
                             self.logger.debug(f"Prefetch failed for channel {n}: {e}")
                         finally:
