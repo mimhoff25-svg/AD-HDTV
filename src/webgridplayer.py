@@ -2019,7 +2019,7 @@ class VideoPlayer(QFrame):
             
             # Log the media loading attempt
             media_type = "file" if not url.startswith(('http://', 'https://')) else "stream"
-            self.log_event('load_media', media_type=media_type)
+            self.log_event('load_media', media_type=media_type, title=title or url)
             
             # Create media with additional options for HLS streams
             if url.startswith(('http://', 'https://')):
@@ -5293,6 +5293,7 @@ class ADHDTVPlayer(QMainWindow):
             # Browser-only channels: skip thread pool, load directly in web view
             _browser_only = ('tvpass.org', 'kristv.com', 'kiiitv.com', 'ewtn.com')
             if any(d in urlparse(source_url).netloc for d in _browser_only):
+                self.logger.info(f"Channel {number} ({title}): browser-only, loading in web view")
                 if self.active_player and hasattr(self.active_player, 'current_channel_number'):
                     self.active_player.current_channel_number = number
                 if WEBENGINE_AVAILABLE:
@@ -5330,25 +5331,29 @@ class ADHDTVPlayer(QMainWindow):
                 def on_done():
                     if not future.done():
                         return
-                    # Only discard if user has navigated to a different channel
-                    if self.current_channel != number:
-                        self.logger.debug(
-                            "Ignoring stale tune result for channel %s (now on %s)",
-                            number,
-                            self.current_channel,
-                        )
-                        return
                     try:
                         candidate = _select_best_stream(future.result())
                         new_url = candidate.get('url') if candidate else None
                         stream_type = candidate.get('type', '') if candidate else ''
+
+                        # Always cache the token — even if user navigated away.
+                        # Next visit to this channel will be instant from cache.
+                        if new_url and _is_playable_stream(new_url, stream_type):
+                            self._cache_channel_stream(number, new_url, stream_type)
+
+                        # Only load playback if user is still on this channel
+                        if self.current_channel != number:
+                            self.logger.debug(
+                                "Cached ch %s token but user moved to %s — skipping load",
+                                number, self.current_channel,
+                            )
+                            return
 
                         if self.active_player and new_url and _is_playable_stream(new_url, stream_type):
                             if hasattr(self.active_player, 'current_channel_number'):
                                 self.active_player.current_channel_number = number
                             self.active_player.load_media(new_url, title=display_title, source_url=source_url)
                             self.refresh_audio_states()
-                            self._cache_channel_stream(number, new_url, stream_type)
                             self.status_bar.showMessage(f"✓ Tuned to channel {number}: {title}")
                         elif candidate and WEBENGINE_AVAILABLE:
                             # Use browser mode fallback when only a webpage is available
