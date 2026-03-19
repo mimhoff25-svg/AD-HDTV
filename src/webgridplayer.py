@@ -470,6 +470,20 @@ class VideoStreamExtractor:
             self.logger.debug("Stream name element not found or invalid.")
             return streams
 
+        # The token endpoint requires the CSRF token from the page and the session cookies.
+        csrf_meta = soup.find('meta', attrs={'name': 'csrf-token'})
+        csrf_token = csrf_meta.get('content', '') if csrf_meta else ''
+        token_headers = {
+            'Referer': page_url,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+        }
+        if csrf_token:
+            token_headers['X-CSRF-TOKEN'] = csrf_token
+
         token_url = urljoin(page_url, f"/token/{stream_name}")
         try:
             # Retry logic for slow TheTVApp servers
@@ -479,7 +493,7 @@ class VideoStreamExtractor:
                     # Add delay between token requests
                     if attempt > 0:
                         time.sleep(self.request_delay)
-                    token_resp = self.session.get(token_url, headers={'Referer': page_url}, timeout=20)
+                    token_resp = self.session.get(token_url, headers=token_headers, timeout=20)
                     if token_resp.status_code >= 500 and attempt < max_retries - 1:
                         time.sleep(self.retry_backoff * (attempt + 1))
                         continue
