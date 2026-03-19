@@ -3139,7 +3139,9 @@ class ADHDTVPlayer(QMainWindow):
         self._apply_initial_layout()
         self._load_favorites_from_disk()
         self._load_playlists_from_disk()
+        self.token_cache_file = STATE_DIR / "token_cache.json"
         self._load_channels_from_disk()
+        self._restore_token_cache()
         channel_config = self.config.get("channels", {})
         # Keep startup responsive by warming a small working set unless the user
         # explicitly opts into prewarming everything.
@@ -4843,6 +4845,60 @@ class ADHDTVPlayer(QMainWindow):
         except Exception as e:
             self.logger.error("Failed to load channels: %s", e)
 
+    def _restore_token_cache(self):
+        """Load cached stream tokens from disk, skipping any that have already expired."""
+        try:
+            if not self.token_cache_file.exists():
+                return
+            with open(self.token_cache_file, 'r') as f:
+                cache = json.load(f)
+            now = int(time.time())
+            restored = 0
+            for k, v in cache.items():
+                try:
+                    num = int(k)
+                except (ValueError, TypeError):
+                    continue
+                if num not in self.channels:
+                    continue
+                url = v.get('url')
+                expiry = v.get('url_expiry')
+                if not url:
+                    continue
+                # Skip expired tokens (30s buffer)
+                if expiry and now >= expiry - 30:
+                    continue
+                self.channels[num]['url'] = url
+                if v.get('url_type'):
+                    self.channels[num]['url_type'] = v['url_type']
+                if expiry:
+                    self.channels[num]['url_expiry'] = expiry
+                restored += 1
+            if restored:
+                self.logger.info("Restored %d cached tokens from disk", restored)
+        except Exception as e:
+            self.logger.debug("Failed to restore token cache: %s", e)
+
+    def _flush_token_cache(self):
+        """Write all in-memory stream tokens to disk for persistence across restarts."""
+        try:
+            now = int(time.time())
+            payload = {}
+            for num, ch in self.channels.items():
+                url = ch.get('url')
+                expiry = ch.get('url_expiry')
+                url_type = ch.get('url_type', '')
+                if not url:
+                    continue
+                if expiry and now >= expiry:
+                    continue  # already expired, don't persist
+                payload[str(num)] = {'url': url, 'url_type': url_type, 'url_expiry': expiry}
+            with open(self.token_cache_file, 'w') as f:
+                json.dump(payload, f)
+            self.logger.debug("Flushed %d token(s) to disk", len(payload))
+        except Exception as e:
+            self.logger.debug("Failed to flush token cache: %s", e)
+
     def _save_channels_to_disk(self):
         try:
             # Persist only canonical data (title + source_url + logo). Do not persist tokenized 'url'.
@@ -4891,6 +4947,8 @@ class ADHDTVPlayer(QMainWindow):
         exp = self._parse_url_expiry(url)
         if exp:
             self.channels[num]['url_expiry'] = exp
+        # Persist to disk in background so tokens survive app restarts
+        self.thread_pool.submit(self._flush_token_cache)
 
     def _is_cached_stream_valid(self, num: int, buffer_seconds: int = 30) -> bool:
         """Return True if cached stream exists and has not expired (with buffer)."""
@@ -5231,6 +5289,19 @@ class ADHDTVPlayer(QMainWindow):
 
         # Otherwise, extract fresh stream from source_url if available
         if source_url:
+            # Browser-only channels: skip thread pool, load directly in web view
+            _browser_only = ('tvpass.org', 'kristv.com', 'kiiitv.com', 'ewtn.com')
+            if any(d in urlparse(source_url).netloc for d in _browser_only):
+                if self.active_player and hasattr(self.active_player, 'current_channel_number'):
+                    self.active_player.current_channel_number = number
+                if WEBENGINE_AVAILABLE:
+                    self.add_url_to_browser_mode(source_url)
+                    self.status_bar.showMessage(f"🌐 Browser mode: Channel {number}: {title}")
+                else:
+                    self.status_bar.showMessage(f"Channel {number} requires WebEngine (not available)")
+                self._prefetch_next_channel(number)
+                return
+
             self.logger.info(f"Tuning to channel {number} via source: {title} - {source_url}")
             self.action_logger.info(f"Tuned to Channel {number}: {title}")
             self.status_bar.showMessage(f"Loading channel {number}: {title}...")
