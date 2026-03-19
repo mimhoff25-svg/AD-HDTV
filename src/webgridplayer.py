@@ -512,14 +512,7 @@ class VideoStreamExtractor:
         """Attempt a direct /token/<slug> lookup without loading the page."""
         parsed = urlparse(page_url)
         if 'thetvapp.to' not in parsed.netloc:
-        return []
-
-
-def _extract_streams_worker(url: str) -> List[Dict[str, str]]:
-    """Helper for ProcessPoolExecutor to keep extraction out of the UI process."""
-
-    extractor = VideoStreamExtractor()
-    return extractor.extract_streams(url)
+            return []
         parts = parsed.path.strip('/').split('/')
         if len(parts) < 2 or parts[0] != 'tv':
             return []
@@ -847,6 +840,12 @@ def _extract_streams_worker(url: str) -> List[Dict[str, str]]:
                 'type': 'browser',
                 'title': f'🌐 Browser Mode - {urlparse(url).netloc}'
             }]
+
+
+def _extract_streams_worker(url: str) -> List[Dict[str, str]]:
+    """Helper for ProcessPoolExecutor to keep extraction out of the UI process."""
+    extractor = VideoStreamExtractor()
+    return extractor.extract_streams(url)
 
 
 class VideoPlayer(QFrame):
