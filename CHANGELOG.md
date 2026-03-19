@@ -5,6 +5,27 @@ All notable changes to AD-HDTV (formerly WebGridPlayer) will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Direct numeric channel entry now bypasses surf debounce so manual channel tuning starts immediately.
+- TheTVApp extraction is more tolerant of markup changes by falling back across multiple `stream_name` and CSRF parsing patterns.
+- Async stream-extraction completion now polls futures from the UI thread instead of scheduling UI work from worker-thread callbacks.
+- Token cache writes are serialized to reduce race conditions when multiple channels refresh close together.
+- Automated pytest collection now excludes manual/integration scripts that depend on live third-party streams or unstable Qt/VLC teardown paths.
+
+### Fixed
+- Direct channel tuning could log a tune event without ever reaching `load_media` for fresh TheTVApp channels.
+- Channel loads could stall after PBS or other uncached channels because UI completion handlers were scheduled from worker threads.
+- ESPN and other TheTVApp channels could fail to load when page markup shifted and the extractor missed token metadata.
+- Guide opening no longer fails on PyQt6 with `Qt.NoPen`; guide rendering now uses `Qt.PenStyle.NoPen`.
+- Cached stream metadata no longer retains stale `url_type` or `url_expiry` values after a different stream shape is cached.
+- Bulk token refresh no longer overwrites canonical channel titles with transient extractor labels.
+
+### Testing
+- Stable automated suite currently passes: 10 passed, 1 skipped.
+- Targeted extractor smoke checks return playable HLS URLs for the previously problematic PBS → FOX → CBS → ESPN → Freeform sequence.
+
 ## [1.1.1b1] - 2026-01-09
 
 ### Added
@@ -147,8 +168,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-platform compatibility testing
 - Error condition handling verification
 - Performance testing with multiple video streams
-
-## [Unreleased]
 
 ### Planned Features
 - Fullscreen mode for individual players

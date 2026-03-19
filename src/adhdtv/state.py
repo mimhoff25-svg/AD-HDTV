@@ -1,7 +1,11 @@
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import UTC, datetime
 from threading import Lock
 from typing import Optional, Dict, Any, Union
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
 
 @dataclass
 class Selected:
@@ -25,7 +29,7 @@ class State:
     guide_visible: bool = False
     selected: Selected = field(default_factory=lambda: Selected(channel_id=None))
     audio: AudioState = field(default_factory=AudioState)
-    last_updated_at: datetime = field(default_factory=datetime.utcnow)
+    last_updated_at: datetime = field(default_factory=_utc_now)
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)

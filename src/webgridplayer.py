@@ -107,6 +107,7 @@ TOKEN_CACHE_SCHEMA_VERSION = 3
 _THETVAPP_REQ_LOCK = threading.Lock()
 _THETVAPP_LAST_REQ_TS = 0.0
 _THETVAPP_MIN_INTERVAL_S = float(os.environ.get("ADHDTV_THETVAPP_MIN_INTERVAL", "0.75"))
+_TOKEN_CACHE_WRITE_LOCK = threading.Lock()
 
 
 def get_webengine_view_class():
@@ -475,20 +476,49 @@ class VideoStreamExtractor:
     def _extract_thetvapp_stream(self, soup: BeautifulSoup, page_url: str) -> List[Dict[str, str]]:
         """Extract TheTVApp tokenized stream URLs if present."""
         streams = []
-        stream_node = soup.find(id='stream_name')
-        if not stream_node:
-            return streams
+        page_text = str(soup)
+        stream_name = ''
 
-        stream_name = (stream_node.get('name') or stream_node.get('data-name') or stream_node.text or '').strip()
+        stream_node = soup.find(id='stream_name')
+        if stream_node:
+            stream_name = (
+                stream_node.get('name')
+                or stream_node.get('data-name')
+                or stream_node.get('value')
+                or stream_node.text
+                or ''
+            ).strip()
+
         if not stream_name:
-            self.logger.debug("Stream name element not found or invalid.")
+            # Fallback for markup variants where BeautifulSoup does not expose
+            # the expected attributes cleanly.
+            patterns = [
+                r'id=["\']stream_name["\'][^>]*\bname=["\']([^"\']+)',
+                r'\bname=["\']([^"\']+)["\'][^>]*id=["\']stream_name["\']',
+                r'id=["\']stream_name["\'][^>]*\bvalue=["\']([^"\']+)',
+                r'/token/([A-Za-z0-9_-]+)',
+            ]
+            for pat in patterns:
+                m = re.search(pat, page_text, re.IGNORECASE)
+                if m:
+                    stream_name = (m.group(1) or '').strip()
+                    break
+
+        if not stream_name:
+            self.logger.warning("TheTVApp stream_name missing for %s", page_url)
             return streams
 
         # The token endpoint requires the CSRF token from the page and the session cookies.
         csrf_meta = soup.find('meta', attrs={'name': 'csrf-token'})
         csrf_token = csrf_meta.get('content', '') if csrf_meta else ''
+        if not csrf_token:
+            m = re.search(r'csrf-token["\']\s+content=["\']([^"\']+)', page_text, re.IGNORECASE)
+            if m:
+                csrf_token = (m.group(1) or '').strip()
+
         token_headers = {
             'Referer': page_url,
+            'Origin': 'https://thetvapp.to',
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json, text/javascript, */*; q=0.01',
             'Sec-Fetch-Dest': 'empty',
@@ -918,6 +948,16 @@ class VideoPlayer(QFrame):
             # Fallback minimal log
             logger.info(event)
             action_logger.info(event)
+
+    def _watch_future_on_ui_thread(self, future, callback, interval_ms: int = 50):
+        """Poll a future from the UI thread and run callback once it completes."""
+        def _check_future():
+            if future.done():
+                callback()
+            else:
+                QTimer.singleShot(interval_ms, _check_future)
+
+        QTimer.singleShot(0, _check_future)
     
     def init_ui(self):
         """Initialize the UI components."""
@@ -1385,7 +1425,7 @@ class VideoPlayer(QFrame):
                     self.is_reextracting = False
         
         self.is_reextracting = True
-        future.add_done_callback(lambda _: QTimer.singleShot(0, handle_extraction))
+        self._watch_future_on_ui_thread(future, handle_extraction)
     
     def save_to_channel(self):
         """Save current URL to a channel number."""
@@ -1885,7 +1925,7 @@ class VideoPlayer(QFrame):
                     finally:
                         return
 
-            future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
+            self._watch_future_on_ui_thread(future, on_done)
         else:
             QMessageBox.warning(self, "Channel Missing URL", f"Channel {channel_num} has no URL or source page.")
     
@@ -2605,7 +2645,7 @@ class VideoPlayer(QFrame):
                         finally:
                             self.is_reextracting = False
                 
-                future.add_done_callback(lambda _: QTimer.singleShot(0, handle_extraction))
+                self._watch_future_on_ui_thread(future, handle_extraction)
         else:
             # No source URL available, just try regular refresh again
             self.load_media(self.current_url, title=self.get_display_text())
@@ -2807,7 +2847,7 @@ class VideoPlayer(QFrame):
                     self.is_reextracting = False
         
         self.is_reextracting = True
-        future.add_done_callback(lambda _: QTimer.singleShot(0, handle_auto_recovery))
+        self._watch_future_on_ui_thread(future, handle_auto_recovery)
 
     def _maybe_start_token_refresh(self):
         """Start a periodic token refresh if conditions suggest tokenized HLS."""
@@ -2874,7 +2914,7 @@ class VideoPlayer(QFrame):
                     finally:
                         self.is_token_refreshing = False
 
-            future.add_done_callback(lambda _: QTimer.singleShot(0, handle_refresh))
+            self._watch_future_on_ui_thread(future, handle_refresh)
         except Exception as e:
             logger = logging.getLogger(LOGGER_NAME)
             logger.error(f"Player {self.player_id}: Token refresh tick failed: {e}")
@@ -3223,6 +3263,16 @@ class ADHDTVPlayer(QMainWindow):
 
             future.add_done_callback(_clear_inflight)
             return future
+
+    def _watch_future_on_ui_thread(self, future, callback, interval_ms: int = 50):
+        """Poll a future from the UI thread and run callback once it completes."""
+        def _check_future():
+            if future.done():
+                callback()
+            else:
+                QTimer.singleShot(interval_ms, _check_future)
+
+        QTimer.singleShot(0, _check_future)
 
     def _monitor_performance(self):
         """Monitor performance metrics for 8-video optimization."""
@@ -4962,8 +5012,9 @@ class ADHDTVPlayer(QMainWindow):
                     'url_expiry': expiry,
                     'url_stream_key': ch.get('url_stream_key', ''),
                 }
-            with open(self.token_cache_file, 'w') as f:
-                json.dump(payload, f)
+            with _TOKEN_CACHE_WRITE_LOCK:
+                with open(self.token_cache_file, 'w') as f:
+                    json.dump(payload, f)
             self.logger.debug("Flushed %d token(s) to disk", len(payload))
         except Exception as e:
             self.logger.debug("Failed to flush token cache: %s", e)
@@ -5042,6 +5093,8 @@ class ADHDTVPlayer(QMainWindow):
         self.channels[num]['url'] = url
         if stream_type:
             self.channels[num]['url_type'] = stream_type
+        else:
+            self.channels[num].pop('url_type', None)
         stream_key = self._parse_thetvapp_stream_key(url)
         if stream_key:
             self.channels[num]['url_stream_key'] = stream_key
@@ -5050,6 +5103,8 @@ class ADHDTVPlayer(QMainWindow):
         exp = self._parse_url_expiry(url)
         if exp:
             self.channels[num]['url_expiry'] = exp
+        else:
+            self.channels[num].pop('url_expiry', None)
         # Persist to disk in background so tokens survive app restarts
         self.thread_pool.submit(self._flush_token_cache)
 
@@ -5109,7 +5164,7 @@ class ADHDTVPlayer(QMainWindow):
                 except Exception as e:
                     self.logger.debug(f"Background refresh failed for channel {num}: {e}")
 
-        future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
+        self._watch_future_on_ui_thread(future, on_done)
 
     def update_all_player_channel_lists(self):
         """Update channel dropdown lists in all players."""
@@ -5349,9 +5404,11 @@ class ADHDTVPlayer(QMainWindow):
         except ValueError:
             QMessageBox.warning(self, "Invalid Channel", "Please enter a number.")
             return
-        self.tune_channel(num)
+        # Direct numeric tuning should start immediately instead of waiting for
+        # channel-surf debounce.
+        self.tune_channel(num, debounce_ms=0, origin="direct")
 
-    def tune_channel(self, number: int):
+    def tune_channel(self, number: int, debounce_ms: int = 350, origin: str = "navigation"):
         # Track when user last tuned a channel (for idle background refresh)
         import time
         self._last_channel_tune_time = time.time()
@@ -5436,10 +5493,8 @@ class ADHDTVPlayer(QMainWindow):
                 if hasattr(self.active_player, 'status_label'):
                     self.active_player.status_label.setText("⏳")
 
-            # Debounce: wait 350ms before submitting extraction so that rapid
-            # channel-surfing (pressing ▲ multiple times) doesn't flood the pool.
-            # If the user navigates again within 350ms, current_channel changes
-            # and we skip submission.
+            # Debounce to avoid flooding extraction when channel surfing.
+            # Direct numeric tunes can override this with debounce_ms=0.
             _req_id = tune_request_id
 
             def _submit_extraction_if_current():
@@ -5511,9 +5566,12 @@ class ADHDTVPlayer(QMainWindow):
                             self.logger.error(f"Channel {number} extraction error: {e}")
                             self.status_bar.showMessage(f"Error loading Channel {number}: {type(e).__name__}")
 
-                future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
+                self._watch_future_on_ui_thread(future, on_done)
 
-            QTimer.singleShot(350, _submit_extraction_if_current)
+            if debounce_ms <= 0:
+                _submit_extraction_if_current()
+            else:
+                QTimer.singleShot(debounce_ms, _submit_extraction_if_current)
             
             # Prefetch next channel in background for smooth up/down navigation
             self._prefetch_next_channel(number)
@@ -5595,7 +5653,7 @@ class ADHDTVPlayer(QMainWindow):
             next_idx = (idx + 1) % len(numbers)
         else:
             next_idx = 0
-        self.tune_channel(numbers[next_idx])
+        self.tune_channel(numbers[next_idx], debounce_ms=350, origin="up")
 
     def channel_down(self):
         if not self.channels:
@@ -5606,7 +5664,7 @@ class ADHDTVPlayer(QMainWindow):
             prev_idx = (idx - 1) % len(numbers)
         else:
             prev_idx = len(numbers) - 1
-        self.tune_channel(numbers[prev_idx])
+        self.tune_channel(numbers[prev_idx], debounce_ms=350, origin="down")
 
     def manage_channels_dialog(self):
         dialog = QDialog(self)
@@ -5935,8 +5993,6 @@ class ADHDTVPlayer(QMainWindow):
                         stream_type = candidate.get('type', '') if candidate else ''
                         if new_url and _is_playable_stream(new_url, stream_type):
                             self._cache_channel_stream(num, new_url, stream_type)
-                            if candidate and candidate.get('title'):
-                                self.channels[num]['title'] = candidate['title']
                             logger.info(f"Refreshed token for Ch {num}: {self.channels[num]['title']}")
                         else:
                             logger.warning(f"No streams for Ch {num} during refresh")
@@ -5946,7 +6002,7 @@ class ADHDTVPlayer(QMainWindow):
                         idx += 1
                         QTimer.singleShot(10, process_next)
 
-            future.add_done_callback(lambda _: QTimer.singleShot(0, on_done))
+            self._watch_future_on_ui_thread(future, on_done)
         
         process_next()
     
@@ -6024,7 +6080,7 @@ class ADHDTVPlayer(QMainWindow):
                     log_error_with_context("Extraction Error", f"URL: {url}", e)
                     self.load_url_directly(url)
 
-        future.add_done_callback(lambda _: QTimer.singleShot(0, check_completion))
+        self._watch_future_on_ui_thread(future, check_completion)
     
     def fetch_web_streams(self):
         """Fetch video streams from a web page."""
@@ -6060,7 +6116,7 @@ class ADHDTVPlayer(QMainWindow):
                         log_error_with_context("Extraction Error", f"URL: {url}", e)
                         self.load_url_directly(url)
 
-            future.add_done_callback(lambda _: QTimer.singleShot(0, check_completion))
+            self._watch_future_on_ui_thread(future, check_completion)
     
     def show_stream_selection_dialog(self, streams: List[Dict[str, str]], source_url: str = None):
         """Show dialog to select which streams to add to the grid."""
@@ -7015,8 +7071,9 @@ class ADHDTVPlayer(QMainWindow):
                             self._idle_refresh_pending.discard(n)
 
                     # Dispatch to main thread exactly once when future finishes (no busy-wait)
-                    future.add_done_callback(
-                        lambda f, n=num: QTimer.singleShot(0, lambda: on_idle_refresh_done(n, f))
+                    self._watch_future_on_ui_thread(
+                        future,
+                        lambda n=num, f=future: on_idle_refresh_done(n, f),
                     )
         except Exception as e:
             self.logger.debug(f"Idle channel refresh error: {e}")

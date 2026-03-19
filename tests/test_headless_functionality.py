@@ -36,7 +36,7 @@ def test_webgridplayer_functionality():
                 
         except ImportError as e:
             print(f"   ❌ PyQt6 import failed: {e}")
-            return False
+            assert False, str(e)
             
         # Test VLC
         try:
@@ -44,7 +44,7 @@ def test_webgridplayer_functionality():
             print("   ✅ VLC python bindings available")
         except ImportError as e:
             print(f"   ❌ VLC import failed: {e}")
-            return False
+            assert False, str(e)
             
         # Test web scraping
         try:
@@ -53,7 +53,7 @@ def test_webgridplayer_functionality():
             print("   ✅ Web scraping libraries available")
         except ImportError as e:
             print(f"   ❌ Web scraping import failed: {e}")
-            return False
+            assert False, str(e)
             
         print()
         
@@ -94,7 +94,7 @@ def test_webgridplayer_functionality():
             
         except Exception as e:
             print(f"   ❌ VLC test failed: {e}")
-            return False
+            assert False, str(e)
             
         print()
         
@@ -116,7 +116,7 @@ def test_webgridplayer_functionality():
             
         except Exception as e:
             print(f"   ❌ Qt application test failed: {e}")
-            return False
+            assert False, str(e)
         
         print()
         
@@ -134,13 +134,13 @@ def test_webgridplayer_functionality():
         print("   • Or use Xvfb: xvfb-run python webgridplayer.py")
         print("   • Or run on desktop with display")
         
-        return True
+        assert True
         
     except Exception as e:
         print(f"❌ Test failed with error: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, str(e)
 
 if __name__ == "__main__":
     success = test_webgridplayer_functionality()

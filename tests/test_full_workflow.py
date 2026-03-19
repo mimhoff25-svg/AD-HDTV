@@ -42,7 +42,7 @@ def test_full_workflow():
         
         if not hls_streams:
             print("❌ No HLS streams found to test")
-            return False
+            assert False, "No HLS streams found to test"
         
         # Step 2: Create player grid (2x2)
         print("\n🎮 Step 2: Creating player grid...")
@@ -134,13 +134,13 @@ def test_full_workflow():
         # Cleanup
         app.quit()
         
-        return success
+        assert success
         
     except Exception as e:
         print(f"❌ Workflow test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, str(e)
 
 if __name__ == "__main__":
     success = test_full_workflow()

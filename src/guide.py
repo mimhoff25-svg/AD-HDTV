@@ -279,12 +279,19 @@ class GuideCanvas(QGraphicsView):
         end_time = start_time + timedelta(minutes=self.SLOT_MINUTES * self.SLOT_COUNT)
 
         # Background
-        self.scene.addRect(QRectF(0, 0, self.CANVAS_W, self.CANVAS_H), pen=QPen(Qt.NoPen), brush=QColor("#0d0d0d"))
+        self.scene.addRect(
+            QRectF(0, 0, self.CANVAS_W, self.CANVAS_H),
+            pen=QPen(Qt.PenStyle.NoPen),
+            brush=QColor("#0d0d0d"),
+        )
 
         # Header row: times
         header_y = 0
-        header_bg = self.scene.addRect(QRectF(self.LEFT_W, header_y, self.CANVAS_W - self.LEFT_W, self.HEADER_H),
-                                       pen=QPen(Qt.NoPen), brush=QColor("#1a1a1a"))
+        header_bg = self.scene.addRect(
+            QRectF(self.LEFT_W, header_y, self.CANVAS_W - self.LEFT_W, self.HEADER_H),
+            pen=QPen(Qt.PenStyle.NoPen),
+            brush=QColor("#1a1a1a"),
+        )
         header_bg.setZValue(1)
         font = QFont("Helvetica", 10, QFont.Weight.Bold)
         for idx in range(self.SLOT_COUNT + 1):
@@ -311,8 +318,11 @@ class GuideCanvas(QGraphicsView):
 
         sorted_channels = sorted(data.channels, key=lambda c: c.number)
         for row_idx, channel in enumerate(sorted_channels):
-            bg = self.scene.addRect(QRectF(0, row_y, self.CANVAS_W, self.ROW_H),
-                                    pen=QPen(Qt.NoPen), brush=alt[row_idx % 2])
+            bg = self.scene.addRect(
+                QRectF(0, row_y, self.CANVAS_W, self.ROW_H),
+                pen=QPen(Qt.PenStyle.NoPen),
+                brush=alt[row_idx % 2],
+            )
             bg.setZValue(0)
 
             # Channel cell

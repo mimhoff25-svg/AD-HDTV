@@ -1,7 +1,11 @@
 import threading
 from typing import Callable, Dict, Any
 from .state import State
-from datetime import datetime
+from datetime import UTC, datetime
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
 class StateManager:
     def __init__(self, state: State):
@@ -18,12 +22,12 @@ class StateManager:
     def update(self, fn: Callable[[State], None]):
         with self._lock:
             fn(self._state)
-            self._state.last_updated_at = datetime.utcnow()
+            self._state.last_updated_at = _utc_now()
             self._revision += 1
 
     def touch(self):
         with self._lock:
-            self._state.last_updated_at = datetime.utcnow()
+            self._state.last_updated_at = _utc_now()
             self._revision += 1
 
     @property

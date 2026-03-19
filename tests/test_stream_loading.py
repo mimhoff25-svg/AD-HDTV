@@ -88,13 +88,13 @@ def test_stream_loading():
         # Cleanup
         app.quit()
         
-        return success and success2
+        assert success and success2
         
     except Exception as e:
         print(f"❌ Test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, str(e)
 
 if __name__ == "__main__":
     success = test_stream_loading()

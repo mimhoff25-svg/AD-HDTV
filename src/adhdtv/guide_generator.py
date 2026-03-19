@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from .guide_model import Channel, Program, GuideResponse
 from typing import List
 import random
@@ -7,7 +7,7 @@ def round_down_to_30(dt):
     return dt.replace(minute=(dt.minute // 30) * 30, second=0, microsecond=0)
 
 def generate_fake_guide(hours=2, start=None):
-    now = datetime.utcnow() if start is None else start
+    now = datetime.now(UTC) if start is None else start
     start_time = round_down_to_30(now)
     minutes_per_slot = 30
     slot_count = int((hours * 60) // minutes_per_slot)

@@ -5,11 +5,11 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 from adhdtv.state import State
 from adhdtv.state_manager import StateManager
-from datetime import datetime
+from datetime import UTC, datetime
 
 class TestStateManager(unittest.TestCase):
     def test_revision_increments(self):
-        s = State(version="1.0", started_at=datetime.utcnow(), current_channel_id=1, current_channel_name="Test")
+        s = State(version="1.0", started_at=datetime.now(UTC), current_channel_id=1, current_channel_name="Test")
         mgr = StateManager(s)
         rev0 = mgr.revision
         mgr.update(lambda st: setattr(st, 'current_channel_id', 2))
