@@ -202,10 +202,23 @@ brew install vlc python3
 ```
 
 #### 🪟 Windows
-1. Download and install VLC from [videolan.org](https://www.videolan.org/vlc/)
-2. Download and install Python 3.8+ from [python.org](https://python.org)
-3. Install dependencies: `pip install PyQt6 python-vlc requests beautifulsoup4`
-4. Run: `python app.py`
+1. Install **Python 3.8+** from [python.org](https://python.org) (enable "Add Python to PATH" during setup).
+2. Install **VLC Media Player** from [videolan.org](https://www.videolan.org/vlc/).
+3. Open **PowerShell** in the repository root and install dependencies:
+   ```powershell
+   py -3 -m pip install -r requirements.txt
+   ```
+4. (Optional) Create and use a virtual environment:
+   ```powershell
+   py -3 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   py -3 -m pip install -r requirements.txt
+   ```
+5. Launch AD-HDTV:
+   - Double-click `run_windows.bat`, or
+   - Run `.\run_windows.ps1` from PowerShell (if needed first run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`).
+
+Both launchers keep the working directory at the project root and pass through command-line arguments (for example `run_windows.bat --profile demo`).
 
 ## 🎯 Usage Examples
 
