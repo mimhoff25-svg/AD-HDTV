@@ -216,7 +216,7 @@ brew install vlc python3
    ```
 5. Launch AD-HDTV:
    - Double-click `run_windows.bat`, or
-   - Run `.\run_windows.ps1` from PowerShell (if needed first run `Set-ExecutionPolicy -Scope Process Bypass`).
+   - Run `.\run_windows.ps1` from PowerShell (if needed first run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`).
 
 Both launchers keep the working directory at the project root and pass through command-line arguments (for example `run_windows.bat --profile demo`).
 

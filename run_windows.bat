@@ -25,7 +25,7 @@ if not errorlevel 1 (
 
 if "%PYTHON_CMD%"=="" (
     echo [ERROR] Python 3 was not found.
-    echo [ERROR] Install Python 3.8+ from https://www.python.org/downloads/windows/
+    echo [ERROR] Install Python 3.8+ from https://www.python.org/downloads/
     echo [ERROR] Then install dependencies with: py -3 -m pip install -r requirements.txt
     exit /b 1
 )

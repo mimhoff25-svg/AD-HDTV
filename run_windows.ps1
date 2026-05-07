@@ -17,9 +17,13 @@ if (Get-Command py -ErrorAction SilentlyContinue) {
 }
 
 if (-not $pythonCommand) {
-    Write-Error "Python 3 was not found. Install Python 3.8+ from https://www.python.org/downloads/windows/ and run: py -3 -m pip install -r requirements.txt"
+    Write-Host "[ERROR] Python 3 was not found."
+    Write-Host "[ERROR] Install Python 3.8+ from https://www.python.org/downloads/"
+    Write-Host "[ERROR] Then install dependencies with: py -3 -m pip install -r requirements.txt"
     exit 1
 }
+
+$pythonInstallHint = if ($pythonCommand[0] -eq "py") { "py -3" } else { "python" }
 
 $invokeArgs = @()
 if ($pythonCommand.Length -gt 1) {
@@ -33,7 +37,7 @@ $exitCode = $LASTEXITCODE
 if ($exitCode -ne 0) {
     Write-Host ""
     Write-Host "[ERROR] AD-HDTV exited with code $exitCode."
-    Write-Host "[ERROR] If dependencies are missing, run: $($pythonCommand -join ' ') -m pip install -r requirements.txt"
+    Write-Host "[ERROR] If dependencies are missing, run: $pythonInstallHint -m pip install -r requirements.txt"
     Write-Host "[ERROR] Ensure VLC is installed from https://www.videolan.org/vlc/"
 }
 exit $exitCode
