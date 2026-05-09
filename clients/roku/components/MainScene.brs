@@ -71,7 +71,7 @@ sub refreshGuide()
     if lines.count() = 0
         lines.push("No guide data available")
     end if
-    m.guideLabel.text = "Guide`n" + Join(lines, "`n")
+    m.guideLabel.text = "Guide" + Chr(10) + Join(lines, Chr(10))
 end sub
 
 function onKeyEvent(key as String, press as Boolean) as Boolean

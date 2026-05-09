@@ -128,7 +128,7 @@ def _json_body() -> Dict[str, Any]:
     return request.get_json(silent=True) or {}
 
 
-def _value(name: str, *, cast=None) -> Any:
+def _get_request_value(name: str, *, cast=None) -> Any:
     body = _json_body()
     value = request.args.get(name)
     if value is None:
@@ -318,7 +318,7 @@ def create_app(
         return _state_response(app)
 
     def channel_set():
-        channel_id = _value("id")
+        channel_id = _get_request_value("id")
         if channel_id is None:
             return jsonify({"error": "Missing id"}), 400
 
@@ -333,10 +333,10 @@ def create_app(
         return _state_response(app)
 
     def select():
-        row = _value("row")
-        col = _value("col")
-        channel_id = _value("channel_id")
-        start_time_iso = _value("start_time_iso")
+        row = _get_request_value("row")
+        col = _get_request_value("col")
+        channel_id = _get_request_value("channel_id")
+        start_time_iso = _get_request_value("start_time_iso")
         if (
             row is None
             and col is None
@@ -379,7 +379,7 @@ def create_app(
         return _state_response(app)
 
     def audio_solo():
-        source_id = _value("id")
+        source_id = _get_request_value("id")
         if not source_id:
             return jsonify({"error": "Missing id"}), 400
 
@@ -392,7 +392,7 @@ def create_app(
         return _state_response(app)
 
     def audio_mute():
-        raw_value = _value("value")
+        raw_value = _get_request_value("value")
         if raw_value is None:
             return jsonify({"error": "Missing or invalid value"}), 400
 
@@ -414,10 +414,10 @@ def create_app(
 
     def guide():
         try:
-            hours = int(_value("hours") or 2)
+            hours = int(_get_request_value("hours") or 2)
         except (TypeError, ValueError):
             return jsonify({"error": "Invalid hours"}), 400
-        start = _value("start")
+        start = _get_request_value("start")
         if start:
             try:
                 start_dt = datetime.fromisoformat(start)
