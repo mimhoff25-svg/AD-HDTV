@@ -9,6 +9,14 @@
   "tick_rate_hz": 60,
   "display": {"mode": "windowed", "resolution": [1200, 800]},
   "logging": {"level": "INFO"},
+  "hub": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 5005,
+    "auth_token": "",
+    "allow_origins": ["*"],
+    "allowed_ips": []
+  },
   "channels": {
     "lineup_label": ""
   },

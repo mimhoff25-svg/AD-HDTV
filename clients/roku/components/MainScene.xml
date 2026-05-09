@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MainScene" extends="Scene">
+  <interface>
+    <field id="hubConfig" type="assocarray" />
+  </interface>
+  <children>
+    <Label id="titleLabel" translation="[60,60]" width="1160" height="40" text="AD-HDTV Roku" />
+    <Label id="statusLabel" translation="[60,120]" width="1160" height="40" text="Connecting…" />
+    <Label id="channelLabel" translation="[60,180]" width="1160" height="40" text="Channel: -" />
+    <Label id="guideLabel" translation="[60,240]" width="1160" height="220" numLines="8" text="Guide: loading" />
+    <Label id="hintLabel" translation="[60,500]" width="1160" height="120" numLines="6"
+      text="Up/Down: change channel  •  OK: refresh guide  •  Left/Right: hide/show guide  •  Back: mute toggle" />
+    <Timer id="pollTimer" repeat="true" duration="3" />
+  </children>
+</component>

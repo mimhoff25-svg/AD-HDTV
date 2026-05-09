@@ -16,7 +16,7 @@
 - Multiple video grid playback (1x1 to 4x4)
 - Intelligent web stream extraction
 - Synchronized controls and advanced video features
-- Extensible API for remote control (Roku, Android, web)
+- Extensible hub API for remote control (Roku, Android, web)
 
 **Architecture:**
 - **Backend:** Python (ServerX) with VLC/libvlc, PyQt, and web extraction
@@ -31,7 +31,7 @@
 
 - Core backend (Python, VLC) is runnable: grid video playback, stream extraction, basic controls
 - Legacy scripts and desktop integration available (see legacy/)
-- Remote API (planned/in progress)
+- Remote hub API for thin clients
 - TV guide grid renderer (planned)
 - Roku and Android clients (planned)
 
@@ -71,11 +71,11 @@
 
 | Endpoint | Method | Description | Status |
 |----------|--------|-------------|--------|
-| `/play` | POST | Start playback | Implemented |
-| `/pause` | POST | Pause playback | Implemented |
-| `/channel_up` | POST | Increase channel number | Implemented |
-| `/channel_down` | POST | Decrease channel number | Implemented |
-| `/status` | GET | Get current player status | Implemented |
+| `/api/v1/status` | GET | Get current hub status | Implemented |
+| `/api/v1/guide` | GET | Get guide snapshot | Implemented |
+| `/api/v1/control/channel/next` | POST | Increase channel number | Implemented |
+| `/api/v1/control/channel/prev` | POST | Decrease channel number | Implemented |
+| `/api/v1/control/select` | POST | Update current tile selection | Implemented |
 
 See `docs/API.md` for the evolving contract.
 

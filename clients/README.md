@@ -1,8 +1,8 @@
 # AD-HDTV Clients
 
-This folder contains thin frontend clients for AD-HDTV. Each client connects to the ServerX backend via HTTP API.
+This folder contains thin frontend clients for AD-HDTV. Each client connects to the AD-HDTV hub backend via HTTP API.
 
 - `android/`: Android remote controller app (planned)
-- `roku/`: Roku display client (planned)
+- `roku/`: Roku MVP client using the stable `/api/v1` hub contract
 
-Clients are not full applications here—just placeholders and stubs for future development.
+Clients are intentionally lightweight and should keep hub-specific integration details local to each client folder.

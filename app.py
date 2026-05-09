@@ -109,13 +109,23 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(config_path, args.profile)
     app_state = build_app_state(config, args.profile)
 
+    from adhdtv.api import build_state_manager, run_api
     from webgridplayer import main as app_main
     from webgridplayer import setup_logging
 
     # Start remote API server in background thread
     try:
-        import remote_api
-        threading.Thread(target=remote_api.run_api, daemon=True).start()
+        hub_config = config.get("hub", {})
+        if hub_config.get("enabled", True):
+            state_manager = build_state_manager(
+                version=app_state.version,
+                current_channel_id=app_state.current_channel or 1,
+            )
+            threading.Thread(
+                target=run_api,
+                kwargs={"state_mgr": state_manager, "config": config},
+                daemon=True,
+            ).start()
     except Exception as e:
         print(f"[WARN] Could not start remote API server: {e}")
 

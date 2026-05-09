@@ -26,6 +26,7 @@ class State:
     started_at: datetime
     current_channel_id: Union[str, int]
     current_channel_name: str
+    playing: bool = True
     guide_visible: bool = False
     selected: Selected = field(default_factory=lambda: Selected(channel_id=None))
     audio: AudioState = field(default_factory=AudioState)

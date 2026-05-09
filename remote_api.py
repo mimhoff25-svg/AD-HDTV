@@ -1,85 +1,24 @@
-"""Remote control API for AD_HDTV.
+"""Compatibility wrapper around the consolidated AD-HDTV hub API."""
 
-Simple Flask server to receive remote commands.
-"""
+from __future__ import annotations
 
-from flask import Flask, request, jsonify
-import threading
+import sys
+from pathlib import Path
 
-app = Flask(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
-# Example: You should connect these to your real player logic
-player_state = {
-    'playing': False,
-    'channel': 1
-}
+from adhdtv.api import build_state_manager, create_app, run_api as _run_api
 
 
-@app.route('/api_options', methods=['GET'])
-def api_options():
-    options = [
-        {
-            'endpoint': '/play',
-            'method': 'POST',
-            'description': 'Start playback.'
-        },
-        {
-            'endpoint': '/pause',
-            'method': 'POST',
-            'description': 'Pause playback.'
-        },
-        {
-            'endpoint': '/channel_up',
-            'method': 'POST',
-            'description': 'Increase channel number.'
-        },
-        {
-            'endpoint': '/channel_down',
-            'method': 'POST',
-            'description': 'Decrease channel number.'
-        },
-        {
-            'endpoint': '/status',
-            'method': 'GET',
-            'description': 'Get current player status.'
-        }
-    ]
-    return jsonify({'api_options': options})
-
-@app.route('/play', methods=['POST'])
-def play():
-    player_state['playing'] = True
-    # TODO: Call your play logic here
-    return jsonify({'status': 'playing'})
-
-@app.route('/pause', methods=['POST'])
-def pause():
-    player_state['playing'] = False
-    # TODO: Call your pause logic here
-    return jsonify({'status': 'paused'})
-
-@app.route('/channel_up', methods=['POST'])
-def channel_up():
-    player_state['channel'] += 1
-    # TODO: Call your channel up logic here
-    return jsonify({'channel': player_state['channel']})
-
-@app.route('/channel_down', methods=['POST'])
-def channel_down():
-    player_state['channel'] = max(1, player_state['channel'] - 1)
-    # TODO: Call your channel down logic here
-    return jsonify({'channel': player_state['channel']})
-
-@app.route('/status', methods=['GET'])
-def status():
-    return jsonify(player_state)
+app = create_app(state_mgr=build_state_manager(), include_legacy_aliases=True)
 
 
-def run_api():
-    app.run(host='0.0.0.0', port=5005, debug=False)
+def run_api(config=None):
+    _run_api(build_state_manager(), config=config, include_legacy_aliases=True)
 
-# To run in a thread from your main app:
-# threading.Thread(target=run_api, daemon=True).start()
 
 if __name__ == '__main__':
     run_api()
