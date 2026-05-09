@@ -58,11 +58,15 @@ def build_server_config(config: Optional[Dict[str, Any]] = None) -> Dict[str, An
 
     allowed_ips = hub.get("allowed_ips", [])
     if isinstance(allowed_ips, str):
-        allowed_ips = [entry.strip() for entry in allowed_ips.split(",") if entry.strip()]
+        allowed_ips = [
+            entry.strip() for entry in allowed_ips.split(",") if entry.strip()
+        ]
 
     allow_origins = hub.get("allow_origins", ["*"])
     if isinstance(allow_origins, str):
-        allow_origins = [entry.strip() for entry in allow_origins.split(",") if entry.strip()]
+        allow_origins = [
+            entry.strip() for entry in allow_origins.split(",") if entry.strip()
+        ]
 
     auth_token = str(hub.get("auth_token", "")).strip()
 
@@ -106,7 +110,10 @@ def _is_ip_allowed(remote_addr: str | None, allowed_ips: Iterable[str]) -> bool:
     return False
 
 
-def _resolve_allowed_origin(origin: str | None, allow_origins: Iterable[str]) -> str | None:
+def _resolve_allowed_origin(
+    origin: str | None,
+    allow_origins: Iterable[str],
+) -> str | None:
     entries = [entry for entry in allow_origins if entry]
     if not entries:
         return None
@@ -153,7 +160,12 @@ def create_app(
         *legacy_rules: str,
     ) -> None:
         method_list = sorted(set(methods) | {"OPTIONS"})
-        app.add_url_rule(rule, endpoint=endpoint, view_func=view_func, methods=method_list)
+        app.add_url_rule(
+            rule,
+            endpoint=endpoint,
+            view_func=view_func,
+            methods=method_list,
+        )
         if include_legacy_aliases:
             for index, legacy_rule in enumerate(legacy_rules):
                 app.add_url_rule(
@@ -325,7 +337,12 @@ def create_app(
         col = _value("col")
         channel_id = _value("channel_id")
         start_time_iso = _value("start_time_iso")
-        if row is None and col is None and channel_id is None and start_time_iso is None:
+        if (
+            row is None
+            and col is None
+            and channel_id is None
+            and start_time_iso is None
+        ):
             return jsonify({"error": "Missing selection values"}), 400
 
         manager = _manager_from_app(app)

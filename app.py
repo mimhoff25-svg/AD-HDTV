@@ -63,7 +63,10 @@ def build_app_state(config: Dict[str, Any], profile: str) -> AppState:
     display = config.get("display", {})
     resolution = display.get("resolution")
     if isinstance(resolution, list) and len(resolution) == 2:
-        resolution_value: Tuple[int, int] | None = (int(resolution[0]), int(resolution[1]))
+        resolution_value: Tuple[int, int] | None = (
+            int(resolution[0]),
+            int(resolution[1]),
+        )
     else:
         resolution_value = None
     return AppState(

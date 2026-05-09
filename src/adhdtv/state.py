@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from threading import Lock
 from typing import Optional, Dict, Any, Union
 
+
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -14,11 +15,13 @@ class Selected:
     col: Optional[int] = None
     start_time_iso: Optional[str] = None
 
+
 @dataclass
 class AudioState:
     solo_source_id: Optional[Union[str, int]] = None
     muted: bool = False
     volume: int = 100
+
 
 @dataclass
 class State:
@@ -37,6 +40,7 @@ class State:
         d['started_at'] = self.started_at.isoformat()
         d['last_updated_at'] = self.last_updated_at.isoformat()
         return d
+
 
 # Thread-safe wrapper for State (used by StateManager)
 class ThreadSafeState:

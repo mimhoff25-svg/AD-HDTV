@@ -11,7 +11,9 @@ def __getattr__(name: str):
     try:
         from webgridplayer import ADHDTVPlayer, VideoPlayer, VideoStreamExtractor
     except Exception as exc:  # pragma: no cover - import guard for diagnostics
-        raise ImportError("Unable to import AD-HDTV core classes from webgridplayer") from exc
+        raise ImportError(
+            "Unable to import AD-HDTV core classes from webgridplayer"
+        ) from exc
     exports = {
         "VideoPlayer": VideoPlayer,
         "VideoStreamExtractor": VideoStreamExtractor,

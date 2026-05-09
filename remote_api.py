@@ -10,7 +10,11 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from adhdtv.api import build_state_manager, create_app, run_api as _run_api
+from adhdtv.api import (  # noqa: E402
+    build_state_manager,
+    create_app,
+    run_api as _run_api,
+)
 
 
 app = create_app(state_mgr=build_state_manager(), include_legacy_aliases=True)

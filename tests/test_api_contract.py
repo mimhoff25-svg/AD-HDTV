@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-from adhdtv.api import API_PREFIX, build_state_manager, create_app
-from adhdtv.state import State
-from adhdtv.state_manager import StateManager
+from adhdtv.api import API_PREFIX, build_state_manager, create_app  # noqa: E402
+from adhdtv.state import State  # noqa: E402
+from adhdtv.state_manager import StateManager  # noqa: E402
 
 
 class TestApiContract(unittest.TestCase):
@@ -15,7 +15,12 @@ class TestApiContract(unittest.TestCase):
         self.state_manager = build_state_manager(version="test", current_channel_id=7)
         self.app = create_app(
             state_mgr=self.state_manager,
-            config={"hub": {"auth_token": "secret", "allow_origins": ["http://roku.local"]}},
+            config={
+                "hub": {
+                    "auth_token": "secret",
+                    "allow_origins": ["http://roku.local"],
+                }
+            },
         )
         self.client = self.app.test_client()
         self.headers = {
@@ -34,7 +39,10 @@ class TestApiContract(unittest.TestCase):
         self.assertEqual(payload["version"], "test")
         self.assertEqual(payload["current_channel_id"], 7)
         self.assertTrue(payload["playing"])
-        self.assertEqual(response.headers["Access-Control-Allow-Origin"], "http://roku.local")
+        self.assertEqual(
+            response.headers["Access-Control-Allow-Origin"],
+            "http://roku.local",
+        )
 
     def test_channel_and_selection_controls_accept_json(self):
         channel_response = self.client.post(
@@ -47,7 +55,12 @@ class TestApiContract(unittest.TestCase):
 
         select_response = self.client.post(
             f"{API_PREFIX}/control/select",
-            json={"row": 1, "col": 2, "channel_id": "42", "start_time_iso": "2026-01-27T18:00:00"},
+            json={
+                "row": 1,
+                "col": 2,
+                "channel_id": "42",
+                "start_time_iso": "2026-01-27T18:00:00",
+            },
             headers=self.headers,
         )
         self.assertEqual(select_response.status_code, 200)
@@ -58,7 +71,10 @@ class TestApiContract(unittest.TestCase):
         self.assertEqual(selected["start_time_iso"], "2026-01-27T18:00:00")
 
     def test_guide_and_audio_controls_work(self):
-        guide_show = self.client.post(f"{API_PREFIX}/control/guide/show", headers=self.headers)
+        guide_show = self.client.post(
+            f"{API_PREFIX}/control/guide/show",
+            headers=self.headers,
+        )
         self.assertEqual(guide_show.status_code, 200)
         self.assertTrue(guide_show.get_json()["guide_visible"])
 
@@ -95,7 +111,10 @@ class TestApiContract(unittest.TestCase):
             config={"hub": {"allowed_ips": ["127.0.0.2"]}},
         )
         client = app.test_client()
-        response = client.get(f"{API_PREFIX}/status", environ_overrides={"REMOTE_ADDR": "127.0.0.1"})
+        response = client.get(
+            f"{API_PREFIX}/status",
+            environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+        )
         self.assertEqual(response.status_code, 403)
 
     def test_legacy_aliases_still_work(self):
