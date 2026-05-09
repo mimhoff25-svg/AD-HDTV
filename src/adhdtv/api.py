@@ -396,10 +396,10 @@ def create_app(
         if raw_value is None:
             return jsonify({"error": "Missing or invalid value"}), 400
 
-        text_value = str(raw_value).lower()
-        if text_value in {"1", "true", "yes", "on"}:
+        normalized_value = str(raw_value).lower()
+        if normalized_value in {"1", "true", "yes", "on"}:
             muted = True
-        elif text_value in {"0", "false", "no", "off"}:
+        elif normalized_value in {"0", "false", "no", "off"}:
             muted = False
         else:
             return jsonify({"error": "Missing or invalid value"}), 400
